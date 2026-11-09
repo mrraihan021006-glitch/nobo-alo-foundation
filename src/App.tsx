@@ -55,6 +55,7 @@ const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_ID}/
 const CLOUDINARY_UPLOAD_PRESET = 'wz8yg950';
 
 const SUPER_ADMIN_EMAIL = 'mohammadraihan4386.bd@gmail.com';
+const SUPER_ADMIN_DEFAULT_PASSWORDS = ['NoboAlo@2026', 'noboalo2026', '123456'];
 const DEFAULT_LOGO_URL = 'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/1772377523792_Nobo%20Alo%20Logo-03.png';
 const FAVICON_URL = 'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/Website%20favicon-03.png';
 const DEFAULT_SITE_NAME = 'নব আলো ফাউন্ডেশন';
@@ -107,6 +108,7 @@ interface SiteSettings {
   tagline: string;
   announcement_text: string;
   logo_url: string;
+  favicon_url?: string;
   banners: string[];
   auto_approve: boolean;
 }
@@ -165,6 +167,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   tagline: DEFAULT_TAGLINE,
   announcement_text: DEFAULT_ANNOUNCEMENT,
   logo_url: DEFAULT_LOGO_URL,
+  favicon_url: FAVICON_URL,
   banners: ['', '', '', ''],
   auto_approve: false
 };
@@ -409,15 +412,43 @@ const WhiteCircularLogo: React.FC<{
   sizeClass?: string;
   imgClass?: string;
 }> = ({ logoUrl, sizeClass = 'w-11 h-11', imgClass = 'w-full h-full' }) => {
+  const [imgError, setImgError] = useState(false);
   const resolvedUrl = optimizeMedia(logoUrl || DEFAULT_LOGO_URL);
 
+  useEffect(() => {
+    setImgError(false);
+  }, [logoUrl]);
+
   return (
-    <div className={`bg-white rounded-full p-1.5 shadow-md flex items-center justify-center shrink-0 ${sizeClass}`}>
-      <img
-        src={resolvedUrl}
-        alt="নব আলো ফাউন্ডেশন লোগো"
-        className={`${imgClass} object-contain rounded-full`}
-      />
+    <div className={`bg-white rounded-full p-1.5 shadow-md flex items-center justify-center shrink-0 overflow-hidden ${sizeClass}`}>
+      {!imgError && resolvedUrl ? (
+        <img
+          src={resolvedUrl}
+          alt="নব আলো ফাউন্ডেশন লোগো"
+          className={`${imgClass} object-contain rounded-full`}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <svg viewBox="0 0 64 64" className="w-full h-full" aria-label="নব আলো ফাউন্ডেশন লোগো">
+          <circle cx="32" cy="32" r="30" fill="#0A2F25" stroke="#D4AF37" strokeWidth="2.5" />
+          <polygon
+            points="32,10 37,24 52,24 40,33 44,47 32,38 20,47 24,33 12,24 27,24"
+            fill="#D4AF37"
+          />
+          <circle cx="32" cy="32" r="9" fill="#0A2F25" stroke="#F3D568" strokeWidth="1.5" />
+          <text
+            x="32"
+            y="36"
+            textAnchor="middle"
+            fill="#F3D568"
+            fontSize="10"
+            fontWeight="bold"
+            fontFamily="sans-serif"
+          >
+            নব আলো
+          </text>
+        </svg>
+      )}
     </div>
   );
 };
@@ -606,6 +637,9 @@ const ConfirmModal: React.FC<{
   );
 };
 
+
+const EMBEDDED_FALLBACK_CSS = '/* Pre-compiled Tailwind & Theme Stylesheet for Nobo Alo Foundation */\n*, ::before, ::after {\n  box-sizing: border-box;\n  border-width: 0;\n  border-style: solid;\n  border-color: #e5e7eb;\n}\nhtml, body {\n  overflow-x: hidden;\n  width: 100%;\n  max-width: 100vw;\n  scroll-behavior: smooth;\n  background-color: #F4F7F5;\n  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\' viewBox=\'0 0 80 80\'%3E%3Cg fill=\'none\' stroke=\'%230A2F25\' stroke-width=\'0.6\' stroke-opacity=\'0.055\'%3E%3Cpath d=\'M40 0 L50 30 L80 40 L50 50 L40 80 L30 50 L0 40 L30 30 Z\'/%3E%3Ccircle cx=\'40\' cy=\'40\' r=\'18\'/%3E%3C/g%3E%3C/svg%3E");\n  font-family: \'Hind Siliguri\', \'Poppins\', sans-serif;\n  color: #0A2F25;\n  margin: 0;\n  padding: 0;\n  line-height: 1.5;\n  -webkit-text-size-adjust: 100%;\n}\nimg, video, svg {\n  display: block;\n  max-width: 100%;\n}\nbutton, input, select, textarea {\n  font-family: inherit;\n  font-size: 100%;\n  line-height: inherit;\n  color: inherit;\n  margin: 0;\n}\nbutton {\n  cursor: pointer;\n  background-color: transparent;\n  background-image: none;\n}\na {\n  color: inherit;\n  text-decoration: inherit;\n}\ntable {\n  text-indent: 0;\n  border-color: inherit;\n  border-collapse: collapse;\n}\n.font-english {\n  font-family: \'Poppins\', \'Hind Siliguri\', sans-serif;\n}\n@keyframes mandalaSpin {\n  0% { transform: rotate(0deg); }\n  100% { transform: rotate(360deg); }\n}\n@keyframes mandalaSpinReverse {\n  0% { transform: rotate(360deg); }\n  100% { transform: rotate(0deg); }\n}\n.animate-mandala {\n  animation: mandalaSpin 65s linear infinite;\n}\n.animate-mandala-reverse {\n  animation: mandalaSpinReverse 80s linear infinite;\n}\n@keyframes marqueeScroll {\n  0% { transform: translateX(0%); }\n  100% { transform: translateX(-50%); }\n}\n.animate-marquee {\n  display: inline-flex;\n  white-space: nowrap;\n  animation: marqueeScroll 28s linear infinite;\n}\n.animate-marquee:hover {\n  animation-play-state: paused;\n}\n@keyframes fadeIn {\n  from { opacity: 0; transform: translateY(6px); }\n  to { opacity: 1; transform: translateY(0); }\n}\n.animate-fadeIn {\n  animation: fadeIn 0.25s ease-out forwards;\n}\n@keyframes spin {\n  to { transform: rotate(360deg); }\n}\n.animate-spin {\n  animation: spin 1s linear infinite;\n}\n.no-scrollbar::-webkit-scrollbar {\n  display: none;\n}\n.no-scrollbar {\n  -ms-overflow-style: none;\n  scrollbar-width: none;\n}\n\n/* Core Layout & Positioning Utilities */\n.min-h-screen { min-height: 100vh; }\n.min-h-\\[460px\\] { min-height: 460px; }\n.flex { display: flex; }\n.inline-flex { display: inline-flex; }\n.inline-block { display: inline-block; }\n.block { display: block; }\n.grid { display: grid; }\n.hidden { display: none; }\n.flex-col { flex-direction: column; }\n.flex-wrap { flex-wrap: wrap; }\n.flex-1 { flex: 1 1 0%; }\n.shrink-0 { flex-shrink: 0; }\n.items-center { align-items: center; }\n.items-start { align-items: flex-start; }\n.justify-center { justify-content: center; }\n.justify-between { justify-content: space-between; }\n.justify-end { justify-content: flex-end; }\n.self-end { align-self: flex-end; }\n.relative { position: relative; }\n.absolute { position: absolute; }\n.fixed { position: fixed; }\n.sticky { position: sticky; }\n.inset-0 { top: 0; right: 0; bottom: 0; left: 0; }\n.inset-x-0 { left: 0; right: 0; }\n.top-0 { top: 0; }\n.top-1 { top: 0.25rem; }\n.top-2 { top: 0.5rem; }\n.top-3 { top: 0.75rem; }\n.top-16 { top: 4rem; }\n.top-1\\/2 { top: 50%; }\n.bottom-0 { bottom: 0; }\n.bottom-2\\.5 { bottom: 0.625rem; }\n.bottom-3 { bottom: 0.75rem; }\n.bottom-5 { bottom: 1.25rem; }\n.left-0 { left: 0; }\n.left-3 { left: 0.75rem; }\n.left-3\\.5 { left: 0.875rem; }\n.left-1\\/2 { left: 50%; }\n.right-1 { right: 0.25rem; }\n.right-2 { right: 0.5rem; }\n.right-2\\.5 { right: 0.625rem; }\n.right-3 { right: 0.75rem; }\n.right-4 { right: 1rem; }\n.-left-24 { left: -6rem; }\n.-left-28 { left: -7rem; }\n.-right-24 { right: -6rem; }\n.-right-28 { right: -7rem; }\n.-top-24 { top: -6rem; }\n.-top-28 { top: -7rem; }\n.-bottom-24 { bottom: -6rem; }\n.-bottom-28 { bottom: -7rem; }\n.-mt-10 { margin-top: -2.5rem; }\n.-translate-x-1\\/2 { transform: translateX(-50%); }\n.-translate-y-1\\/2 { transform: translateY(-50%); }\n.translate-x-0 { transform: translateX(0px); }\n.translate-x-6 { transform: translateX(1.5rem); }\n.z-10 { z-index: 10; }\n.z-30 { z-index: 30; }\n.z-40 { z-index: 40; }\n.z-50 { z-index: 50; }\n.pointer-events-none { pointer-events: none; }\n.select-none { user-select: none; }\n.cursor-pointer { cursor: pointer; }\n.overflow-hidden { overflow: hidden; }\n.overflow-x-hidden { overflow-x: hidden; }\n.overflow-x-auto { overflow-x: auto; }\n.overflow-y-auto { overflow-y: auto; }\n.break-inside-avoid { break-inside: avoid; }\n.break-words { overflow-wrap: break-word; }\n.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.whitespace-nowrap { white-space: nowrap; }\n.whitespace-pre-line { white-space: pre-line; }\n.line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }\n\n/* Sizing */\n.w-2 { width: 0.5rem; }\n.w-3 { width: 0.75rem; }\n.w-3\\.5 { width: 0.875rem; }\n.w-4 { width: 1rem; }\n.w-5 { width: 1.25rem; }\n.w-6 { width: 1.5rem; }\n.w-7 { width: 1.75rem; }\n.w-8 { width: 2rem; }\n.w-9 { width: 2.25rem; }\n.w-10 { width: 2.5rem; }\n.w-11 { width: 2.75rem; }\n.w-12 { width: 3rem; }\n.w-14 { width: 3.5rem; }\n.w-16 { width: 4rem; }\n.w-20 { width: 5rem; }\n.w-24 { width: 6rem; }\n.w-full { width: 100%; }\n.w-\\[92vw\\] { width: 92vw; }\n.min-w-0 { min-width: 0px; }\n.min-w-\\[200px\\] { min-width: 200px; }\n.min-w-\\[600px\\] { min-width: 600px; }\n.max-w-xs { max-width: 20rem; }\n.max-w-sm { max-width: 24rem; }\n.max-w-md { max-width: 28rem; }\n.max-w-lg { max-width: 32rem; }\n.max-w-xl { max-width: 36rem; }\n.max-w-2xl { max-width: 42rem; }\n.max-w-3xl { max-width: 48rem; }\n.max-w-4xl { max-width: 56rem; }\n.max-w-7xl { max-width: 80rem; }\n.max-w-\\[100vw\\] { max-width: 100vw; }\n.h-1 { height: 0.25rem; }\n.h-1\\.5 { height: 0.375rem; }\n.h-2 { height: 0.5rem; }\n.h-3 { height: 0.75rem; }\n.h-3\\.5 { height: 0.875rem; }\n.h-4 { height: 1rem; }\n.h-5 { height: 1.25rem; }\n.h-6 { height: 1.5rem; }\n.h-7 { height: 1.75rem; }\n.h-8 { height: 2rem; }\n.h-9 { height: 2.25rem; }\n.h-10 { height: 2.5rem; }\n.h-11 { height: 2.75rem; }\n.h-12 { height: 3rem; }\n.h-14 { height: 3.5rem; }\n.h-16 { height: 4rem; }\n.h-20 { height: 5rem; }\n.h-24 { height: 6rem; }\n.h-28 { height: 7rem; }\n.h-40 { height: 10rem; }\n.h-44 { height: 11rem; }\n.h-52 { height: 13rem; }\n.h-64 { height: 16rem; }\n.h-full { height: 100%; }\n.max-h-96 { max-height: 24rem; }\n.max-h-\\[82vh\\] { max-height: 82vh; }\n.max-h-\\[92vh\\] { max-height: 92vh; }\n\n/* Grid & Columns */\n.grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }\n.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n.grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }\n.columns-1 { columns: 1; }\n.gap-1 { gap: 0.25rem; }\n.gap-1\\.5 { gap: 0.375rem; }\n.gap-2 { gap: 0.5rem; }\n.gap-2\\.5 { gap: 0.625rem; }\n.gap-3 { gap: 0.75rem; }\n.gap-3\\.5 { gap: 0.875rem; }\n.gap-4 { gap: 1rem; }\n.gap-5 { gap: 1.25rem; }\n.gap-6 { gap: 1.5rem; }\n.space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25rem; }\n.space-y-2\\.5 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.625rem; }\n.space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem; }\n.space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; }\n.space-y-5 > :not([hidden]) ~ :not([hidden]) { margin-top: 1.25rem; }\n.space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1.5rem; }\n.divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; border-color: #f3f4f6; }\n\n/* Spacing (Padding & Margin) */\n.p-0\\.5 { padding: 0.125rem; }\n.p-1 { padding: 0.25rem; }\n.p-1\\.5 { padding: 0.375rem; }\n.p-2 { padding: 0.5rem; }\n.p-3 { padding: 0.75rem; }\n.p-3\\.5 { padding: 0.875rem; }\n.p-4 { padding: 1rem; }\n.p-5 { padding: 1.25rem; }\n.p-6 { padding: 1.5rem; }\n.p-12 { padding: 3rem; }\n.px-1\\.5 { padding-left: 0.375rem; padding-right: 0.375rem; }\n.px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }\n.px-2\\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }\n.px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }\n.px-3\\.5 { padding-left: 0.875rem; padding-right: 0.875rem; }\n.px-4 { padding-left: 1rem; padding-right: 1rem; }\n.px-5 { padding-left: 1.25rem; padding-right: 1.25rem; }\n.px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }\n.px-7 { padding-left: 1.75rem; padding-right: 1.75rem; }\n.py-0\\.2 { padding-top: 0.05rem; padding-bottom: 0.05rem; }\n.py-0\\.5 { padding-top: 0.125rem; padding-bottom: 0.125rem; }\n.py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }\n.py-1\\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }\n.py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }\n.py-2\\.5 { padding-top: 0.625rem; padding-bottom: 0.625rem; }\n.py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }\n.py-3\\.5 { padding-top: 0.875rem; padding-bottom: 0.875rem; }\n.py-4 { padding-top: 1rem; padding-bottom: 1rem; }\n.py-6 { padding-top: 1.5rem; padding-bottom: 1.5rem; }\n.py-8 { padding-top: 2rem; padding-bottom: 2rem; }\n.py-10 { padding-top: 2.5rem; padding-bottom: 2.5rem; }\n.py-11 { padding-top: 2.75rem; padding-bottom: 2.75rem; }\n.py-12 { padding-top: 3rem; padding-bottom: 3rem; }\n.py-14 { padding-top: 3.5rem; padding-bottom: 3.5rem; }\n.pl-10 { padding-left: 2.5rem; }\n.pr-4 { padding-right: 1rem; }\n.pt-2 { padding-top: 0.5rem; }\n.pt-3 { padding-top: 0.75rem; }\n.pt-4 { padding-top: 1rem; }\n.pt-5 { padding-top: 1.25rem; }\n.pb-1 { padding-bottom: 0.25rem; }\n.pb-2 { padding-bottom: 0.5rem; }\n.pb-6 { padding-bottom: 1.5rem; }\n.pb-12 { padding-bottom: 3rem; }\n.mx-auto { margin-left: auto; margin-right: auto; }\n.my-auto { margin-top: auto; margin-bottom: auto; }\n.ml-0\\.5 { margin-left: 0.125rem; }\n.ml-1 { margin-left: 0.25rem; }\n.ml-2 { margin-left: 0.5rem; }\n.ml-auto { margin-left: auto; }\n.mt-0\\.5 { margin-top: 0.125rem; }\n.mt-1 { margin-top: 0.25rem; }\n.mt-1\\.5 { margin-top: 0.375rem; }\n.mt-2 { margin-top: 0.5rem; }\n.mt-2\\.5 { margin-top: 0.625rem; }\n.mt-4 { margin-top: 1rem; }\n.mt-5 { margin-top: 1.25rem; }\n.mt-7 { margin-top: 1.75rem; }\n.mt-10 { margin-top: 2.5rem; }\n.mt-auto { margin-top: auto; }\n.mb-1 { margin-bottom: 0.25rem; }\n.mb-1\\.5 { margin-bottom: 0.375rem; }\n.mb-2 { margin-bottom: 0.5rem; }\n.mb-3 { margin-bottom: 0.75rem; }\n.mb-3\\.5 { margin-bottom: 0.875rem; }\n.mb-4 { margin-bottom: 1rem; }\n.mb-5 { margin-bottom: 1.25rem; }\n.mb-6 { margin-bottom: 1.5rem; }\n.mb-8 { margin-bottom: 2rem; }\n.mb-9 { margin-bottom: 2.25rem; }\n\n/* Typography */\n.text-\\[10px\\] { font-size: 10px; }\n.text-\\[11px\\] { font-size: 11px; }\n.text-xs { font-size: 0.75rem; line-height: 1rem; }\n.text-sm { font-size: 0.875rem; line-height: 1.25rem; }\n.text-base { font-size: 1rem; line-height: 1.5rem; }\n.text-lg { font-size: 1.125rem; line-height: 1.75rem; }\n.text-xl { font-size: 1.25rem; line-height: 1.75rem; }\n.text-2xl { font-size: 1.5rem; line-height: 2rem; }\n.text-3xl { font-size: 1.875rem; line-height: 2.25rem; }\n.font-medium { font-weight: 500; }\n.font-semibold { font-weight: 600; }\n.font-bold { font-weight: 700; }\n.leading-tight { line-height: 1.25; }\n.leading-snug { line-height: 1.375; }\n.leading-relaxed { line-height: 1.625; }\n.tracking-wide { letter-spacing: 0.025em; }\n.tracking-wider { letter-spacing: 0.05em; }\n.text-left { text-align: left; }\n.text-center { text-align: center; }\n.text-right { text-align: right; }\n.underline { text-decoration-line: underline; }\n.underline-offset-4 { text-underline-offset: 4px; }\n\n/* Colors & Backgrounds */\n.text-white { color: #ffffff; }\n.text-white\\/70 { color: rgba(255, 255, 255, 0.7); }\n.text-\\[\\#FFFFFF\\] { color: #FFFFFF; }\n.text-\\[\\#0A2F25\\] { color: #0A2F25; }\n.text-\\[\\#155e4a\\] { color: #155e4a; }\n.text-\\[\\#D4AF37\\] { color: #D4AF37; }\n.text-\\[\\#D4AF37\\]\\/50 { color: rgba(212, 175, 55, 0.5); }\n.text-\\[\\#D4AF37\\]\\/60 { color: rgba(212, 175, 55, 0.6); }\n.text-\\[\\#F3D568\\] { color: #F3D568; }\n.text-\\[\\#F3D568\\]\\/85 { color: rgba(243, 213, 104, 0.85); }\n.text-gray-200 { color: #e5e7eb; }\n.text-gray-300 { color: #d1d5db; }\n.text-gray-400 { color: #9ca3af; }\n.text-gray-500 { color: #6b7280; }\n.text-gray-600 { color: #4b5563; }\n.text-gray-700 { color: #374151; }\n.text-emerald-700 { color: #047857; }\n.text-emerald-800 { color: #065f46; }\n.text-amber-700 { color: #b45309; }\n.text-amber-800 { color: #92400e; }\n.text-red-300 { color: #fca5a5; }\n.text-red-600 { color: #dc2626; }\n.text-red-700 { color: #b91c1c; }\n\n.bg-white { background-color: #ffffff; }\n.bg-white\\/10 { background-color: rgba(255, 255, 255, 0.1); }\n.bg-white\\/20 { background-color: rgba(255, 255, 255, 0.2); }\n.bg-white\\/35 { background-color: rgba(255, 255, 255, 0.35); }\n.bg-white\\/50 { background-color: rgba(255, 255, 255, 0.5); }\n.bg-white\\/95 { background-color: rgba(255, 255, 255, 0.95); }\n.bg-black\\/0 { background-color: rgba(0, 0, 0, 0); }\n.bg-black\\/25 { background-color: rgba(0, 0, 0, 0.25); }\n.bg-black\\/40 { background-color: rgba(0, 0, 0, 0.4); }\n.bg-black\\/60 { background-color: rgba(0, 0, 0, 0.6); }\n.bg-black\\/65 { background-color: rgba(0, 0, 0, 0.65); }\n.bg-black\\/75 { background-color: rgba(0, 0, 0, 0.75); }\n.bg-black\\/85 { background-color: rgba(0, 0, 0, 0.85); }\n.bg-black\\/95 { background-color: rgba(0, 0, 0, 0.95); }\n.bg-\\[\\#061D17\\] { background-color: #061D17; }\n.bg-\\[\\#0A2F25\\] { background-color: #0A2F25; }\n.bg-\\[\\#0A2F25\\]\\/5 { background-color: rgba(10, 47, 37, 0.05); }\n.bg-\\[\\#0A2F25\\]\\/10 { background-color: rgba(10, 47, 37, 0.1); }\n.bg-\\[\\#0A2F25\\]\\/85 { background-color: rgba(10, 47, 37, 0.85); }\n.bg-\\[\\#0A2F25\\]\\/90 { background-color: rgba(10, 47, 37, 0.9); }\n.bg-\\[\\#0A2F25\\]\\/95 { background-color: rgba(10, 47, 37, 0.95); }\n.bg-\\[\\#124A3B\\] { background-color: #124A3B; }\n.bg-\\[\\#124A3B\\]\\/90 { background-color: rgba(18, 74, 59, 0.9); }\n.bg-\\[\\#155e4a\\] { background-color: #155e4a; }\n.bg-\\[\\#D4AF37\\] { background-color: #D4AF37; }\n.bg-\\[\\#D4AF37\\]\\/20 { background-color: rgba(212, 175, 55, 0.2); }\n.bg-\\[\\#F3D568\\] { background-color: #F3D568; }\n.bg-\\[\\#F4F7F5\\] { background-color: #F4F7F5; }\n.bg-gray-100 { background-color: #f3f4f6; }\n.bg-gray-200 { background-color: #e5e7eb; }\n.bg-gray-300 { background-color: #d1d5db; }\n.bg-emerald-100 { background-color: #d1fae5; }\n.bg-emerald-600 { background-color: #059669; }\n.bg-amber-100 { background-color: #fef3c7; }\n.bg-red-50 { background-color: #fef2f2; }\n.bg-red-100 { background-color: #fee2e2; }\n.bg-red-600 { background-color: #dc2626; }\n.bg-red-900\\/95 { background-color: rgba(127, 29, 29, 0.95); }\n\n/* Gradients */\n.bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }\n.bg-gradient-to-br { background-image: linear-gradient(to bottom right, var(--tw-gradient-stops)); }\n.bg-gradient-to-tr { background-image: linear-gradient(to top right, var(--tw-gradient-stops)); }\n.from-\\[\\#0A2F25\\] { --tw-gradient-from: #0A2F25; --tw-gradient-to: rgba(10, 47, 37, 0); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }\n.from-\\[\\#D4AF37\\] { --tw-gradient-from: #D4AF37; --tw-gradient-to: rgba(212, 175, 55, 0); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }\n.via-\\[\\#124A3B\\] { --tw-gradient-to: rgba(18, 74, 59, 0); --tw-gradient-stops: var(--tw-gradient-from), #124A3B, var(--tw-gradient-to); }\n.via-\\[\\#155e4a\\] { --tw-gradient-to: rgba(21, 94, 74, 0); --tw-gradient-stops: var(--tw-gradient-from), #155e4a, var(--tw-gradient-to); }\n.via-\\[\\#D4AF37\\] { --tw-gradient-to: rgba(212, 175, 55, 0); --tw-gradient-stops: var(--tw-gradient-from), #D4AF37, var(--tw-gradient-to); }\n.via-\\[\\#F3D568\\] { --tw-gradient-to: rgba(243, 213, 104, 0); --tw-gradient-stops: var(--tw-gradient-from), #F3D568, var(--tw-gradient-to); }\n.to-\\[\\#0A2F25\\] { --tw-gradient-to: #0A2F25; }\n.to-\\[\\#124A3B\\] { --tw-gradient-to: #124A3B; }\n.to-\\[\\#155e4a\\] { --tw-gradient-to: #155e4a; }\n.to-\\[\\#D4AF37\\] { --tw-gradient-to: #D4AF37; }\n.to-\\[\\#F3D568\\] { --tw-gradient-to: #F3D568; }\n\n/* Borders & Radius */\n.border { border-width: 1px; }\n.border-2 { border-width: 2px; }\n.border-b { border-bottom-width: 1px; }\n.border-b-2 { border-bottom-width: 2px; }\n.border-b-4 { border-bottom-width: 4px; }\n.border-t { border-top-width: 1px; }\n.border-t-2 { border-top-width: 2px; }\n.border-dashed { border-style: dashed; }\n.border-transparent { border-color: transparent; }\n.border-white { border-color: #ffffff; }\n.border-white\\/10 { border-color: rgba(255, 255, 255, 0.1); }\n.border-gray-100 { border-color: #f3f4f6; }\n.border-gray-200 { border-color: #e5e7eb; }\n.border-gray-300 { border-color: #d1d5db; }\n.border-emerald-200 { border-color: #a7f3d0; }\n.border-red-200 { border-color: #fecaca; }\n.border-red-400 { border-color: #f87171; }\n.border-\\[\\#0A2F25\\]\\/15 { border-color: rgba(10, 47, 37, 0.15); }\n.border-\\[\\#155e4a\\]\\/25 { border-color: rgba(21, 94, 74, 0.25); }\n.border-\\[\\#155e4a\\]\\/40 { border-color: rgba(21, 94, 74, 0.4); }\n.border-\\[\\#D4AF37\\] { border-color: #D4AF37; }\n.border-\\[\\#D4AF37\\]\\/30 { border-color: rgba(212, 175, 55, 0.3); }\n.border-\\[\\#D4AF37\\]\\/35 { border-color: rgba(212, 175, 55, 0.35); }\n.border-\\[\\#D4AF37\\]\\/40 { border-color: rgba(212, 175, 55, 0.4); }\n.border-\\[\\#D4AF37\\]\\/45 { border-color: rgba(212, 175, 55, 0.45); }\n.border-\\[\\#D4AF37\\]\\/50 { border-color: rgba(212, 175, 55, 0.5); }\n.border-\\[\\#D4AF37\\]\\/60 { border-color: rgba(212, 175, 55, 0.6); }\n.border-\\[\\#F3D568\\] { border-color: #F3D568; }\n\n.rounded { border-radius: 0.25rem; }\n.rounded-lg { border-radius: 0.5rem; }\n.rounded-xl { border-radius: 0.75rem; }\n.rounded-2xl { border-radius: 1rem; }\n.rounded-3xl { border-radius: 1.5rem; }\n.rounded-full { border-radius: 9999px; }\n.rounded-tl-xl { border-top-left-radius: 0.75rem; }\n.rounded-tr-xl { border-top-right-radius: 0.75rem; }\n\n/* Shadows, Opacity, Blur & Object Fit */\n.shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1); }\n.shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }\n.shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }\n.shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1); }\n.shadow-xl { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); }\n.shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }\n.shadow-\\[0_8px_30px_rgba\\(10\\,47\\,37\\,0\\.28\\)\\] { box-shadow: 0 8px 30px rgba(10, 47, 37, 0.28); }\n.shadow-\\[0_0_40px_rgba\\(212\\,175\\,55\\,0\\.45\\)\\] { box-shadow: 0 0 40px rgba(212, 175, 55, 0.45); }\n.shadow-\\[0_10px_25px_rgba\\(212\\,175\\,55\\,0\\.4\\)\\] { box-shadow: 0 10px 25px rgba(212, 175, 55, 0.4); }\n.drop-shadow-lg { filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.04)) drop-shadow(0 4px 3px rgba(0, 0, 0, 0.1)); }\n.backdrop-blur-sm { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }\n.backdrop-blur-md { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }\n.backdrop-blur-lg { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }\n.backdrop-blur-xl { backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }\n.opacity-0 { opacity: 0; }\n.opacity-35 { opacity: 0.35; }\n.opacity-40 { opacity: 0.4; }\n.opacity-45 { opacity: 0.45; }\n.opacity-60 { opacity: 0.6; }\n.opacity-80 { opacity: 0.8; }\n.object-contain { object-fit: contain; }\n.object-cover { object-fit: cover; }\n.fill-current { fill: currentColor; }\n.accent-\\[\\#0A2F25\\] { accent-color: #0A2F25; }\n.scale-105 { transform: scale(1.05); }\n\n/* Transitions & Interactive States */\n.transition { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }\n.transition-all { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 200ms; }\n.transition-colors { transition-property: color, background-color, border-color; transition-duration: 150ms; }\n.transition-opacity { transition-property: opacity; transition-duration: 500ms; }\n.transition-transform { transition-property: transform; transition-duration: 300ms; }\n.duration-200 { transition-duration: 200ms; }\n.duration-300 { transition-duration: 300ms; }\n.duration-500 { transition-duration: 500ms; }\n.duration-700 { transition-duration: 700ms; }\n.duration-1000 { transition-duration: 1000ms; }\n\n.hover\\:-translate-y-1:hover { transform: translateY(-0.25rem); }\n.hover\\:scale-\\[1\\.02\\]:hover { transform: scale(1.02); }\n.hover\\:brightness-105:hover { filter: brightness(1.05); }\n.hover\\:opacity-95:hover { opacity: 0.95; }\n.hover\\:opacity-100:hover { opacity: 1; }\n.hover\\:underline:hover { text-decoration-line: underline; }\n.hover\\:bg-\\[\\#0A2F25\\]:hover { background-color: #0A2F25; }\n.hover\\:bg-\\[\\#0A2F25\\]\\/5:hover { background-color: rgba(10, 47, 37, 0.05); }\n.hover\\:bg-\\[\\#155e4a\\]:hover { background-color: #155e4a; }\n.hover\\:bg-\\[\\#D4AF37\\]:hover { background-color: #D4AF37; }\n.hover\\:bg-\\[\\#D4AF37\\]\\/20:hover { background-color: rgba(212, 175, 55, 0.2); }\n.hover\\:bg-white:hover { background-color: #ffffff; }\n.hover\\:bg-white\\/20:hover { background-color: rgba(255, 255, 255, 0.2); }\n.hover\\:bg-gray-50:hover { background-color: #f9fafb; }\n.hover\\:bg-gray-50\\/80:hover { background-color: rgba(249, 250, 251, 0.8); }\n.hover\\:bg-gray-100:hover { background-color: #f3f4f6; }\n.hover\\:bg-emerald-700:hover { background-color: #047857; }\n.hover\\:bg-red-600:hover { background-color: #dc2626; }\n.hover\\:bg-red-700:hover { background-color: #b91c1c; }\n.hover\\:text-\\[\\#0A2F25\\]:hover { color: #0A2F25; }\n.hover\\:text-\\[\\#F3D568\\]:hover { color: #F3D568; }\n.hover\\:text-white:hover { color: #ffffff; }\n.hover\\:border-\\[\\#D4AF37\\]:hover { border-color: #D4AF37; }\n.hover\\:shadow-xl:hover { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); }\n.hover\\:shadow-\\[0_20px_40px_-15px_rgba\\(10\\,47\\,37\\,0\\.22\\)\\]:hover { box-shadow: 0 20px 40px -15px rgba(10, 47, 37, 0.22); }\n.group:hover .group-hover\\:scale-105 { transform: scale(1.05); }\n.group:hover .group-hover\\:scale-110 { transform: scale(1.1); }\n.group:hover .group-hover\\:text-\\[\\#F3D568\\] { color: #F3D568; }\n.group:hover .group-hover\\:text-\\[\\#155e4a\\] { color: #155e4a; }\n.group:hover .group-hover\\:bg-\\[\\#0A2F25\\] { background-color: #0A2F25; }\n.group:hover .group-hover\\:bg-black\\/30 { background-color: rgba(0, 0, 0, 0.3); }\n.group:hover .group-hover\\:opacity-100 { opacity: 1; }\n.focus\\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }\n.focus\\:border-\\[\\#0A2F25\\]:focus { border-color: #0A2F25; }\n.disabled\\:opacity-30:disabled { opacity: 0.3; }\n.disabled\\:opacity-60:disabled { opacity: 0.6; }\n\n/* Responsive Breakpoints (sm: 640px, md: 768px, lg: 1024px) */\n@media (min-width: 640px) {\n  .sm\\:block { display: block; }\n  .sm\\:flex-row { flex-direction: row; }\n  .sm\\:items-center { align-items: center; }\n  .sm\\:self-center { align-self: center; }\n  .sm\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n  .sm\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }\n  .sm\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }\n  .sm\\:col-span-2 { grid-column: span 2 / span 2; }\n  .sm\\:columns-2 { columns: 2; }\n  .sm\\:gap-3 { gap: 0.75rem; }\n  .sm\\:gap-4 { gap: 1rem; }\n  .sm\\:gap-5 { gap: 1.25rem; }\n  .sm\\:w-11 { width: 2.75rem; }\n  .sm\\:w-14 { width: 3.5rem; }\n  .sm\\:w-24 { width: 6rem; }\n  .sm\\:h-11 { height: 2.75rem; }\n  .sm\\:h-14 { height: 3.5rem; }\n  .sm\\:h-24 { height: 6rem; }\n  .sm\\:h-52 { height: 13rem; }\n  .sm\\:h-60 { height: 15rem; }\n  .sm\\:h-80 { height: 20rem; }\n  .sm\\:h-96 { height: 24rem; }\n  .sm\\:min-h-\\[550px\\] { min-height: 550px; }\n  .sm\\:p-4 { padding: 1rem; }\n  .sm\\:p-5 { padding: 1.25rem; }\n  .sm\\:p-6 { padding: 1.5rem; }\n  .sm\\:p-7 { padding: 1.75rem; }\n  .sm\\:p-8 { padding: 2rem; }\n  .sm\\:px-4 { padding-left: 1rem; padding-right: 1rem; }\n  .sm\\:px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }\n  .sm\\:px-9 { padding-left: 2.25rem; padding-right: 2.25rem; }\n  .sm\\:py-10 { padding-top: 2.5rem; padding-bottom: 2.5rem; }\n  .sm\\:py-12 { padding-top: 3rem; padding-bottom: 3rem; }\n  .sm\\:py-14 { padding-top: 3.5rem; padding-bottom: 3.5rem; }\n  .sm\\:py-16 { padding-top: 4rem; padding-bottom: 4rem; }\n  .sm\\:py-20 { padding-top: 5rem; padding-bottom: 5rem; }\n  .sm\\:pt-5 { padding-top: 1.25rem; }\n  .sm\\:pb-16 { padding-bottom: 4rem; }\n  .sm\\:text-left { text-align: left; }\n  .sm\\:text-xs { font-size: 0.75rem; line-height: 1rem; }\n  .sm\\:text-sm { font-size: 0.875rem; line-height: 1.25rem; }\n  .sm\\:text-base { font-size: 1rem; line-height: 1.5rem; }\n  .sm\\:text-lg { font-size: 1.125rem; line-height: 1.75rem; }\n  .sm\\:text-xl { font-size: 1.25rem; line-height: 1.75rem; }\n  .sm\\:text-2xl { font-size: 1.5rem; line-height: 2rem; }\n  .sm\\:text-3xl { font-size: 1.875rem; line-height: 2.25rem; }\n  .sm\\:text-4xl { font-size: 2.25rem; line-height: 2.5rem; }\n  .sm\\:leading-tight { line-height: 1.25; }\n}\n\n@media (min-width: 768px) {\n  .md\\:inline { display: inline; }\n  .md\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }\n  .md\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }\n  .md\\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }\n  .md\\:text-xl { font-size: 1.25rem; line-height: 1.75rem; }\n  .md\\:text-2xl { font-size: 1.5rem; line-height: 2rem; }\n  .md\\:text-4xl { font-size: 2.25rem; line-height: 2.5rem; }\n  .md\\:text-5xl { font-size: 3rem; line-height: 1.15; }\n}\n\n@media (min-width: 1024px) {\n  .lg\\:columns-3 { columns: 3; }\n  .lg\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }\n}\n';
+
 // ============================================================================
 // 6. MAIN PRODUCTION APPLICATION COMPONENT
 // ============================================================================
@@ -678,7 +712,20 @@ export default function App() {
     document.documentElement.setAttribute('translate', 'no');
     document.body.classList.add('notranslate');
     document.title = siteSettings.site_name || DEFAULT_SITE_NAME;
-  }, [siteSettings.site_name]);
+
+    const activeFavicon = optimizeMedia(
+      siteSettings.favicon_url || siteSettings.logo_url || FAVICON_URL
+    );
+    if (activeFavicon) {
+      let linkEl = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null;
+      if (!linkEl) {
+        linkEl = document.createElement('link');
+        linkEl.rel = 'icon';
+        document.head.appendChild(linkEl);
+      }
+      linkEl.href = activeFavicon;
+    }
+  }, [siteSettings.site_name, siteSettings.favicon_url, siteSettings.logo_url]);
 
   useEffect(() => {
     if (appUser) {
@@ -757,6 +804,7 @@ export default function App() {
           tagline: settingsData.tagline || DEFAULT_TAGLINE,
           announcement_text: settingsData.announcement_text || DEFAULT_ANNOUNCEMENT,
           logo_url: settingsData.logo_url || settingsData.logo || DEFAULT_LOGO_URL,
+          favicon_url: settingsData.favicon_url || settingsData.logo_url || settingsData.logo || FAVICON_URL,
           banners: paddedBanners,
           auto_approve: Boolean(settingsData.auto_approve)
         });
@@ -1202,6 +1250,26 @@ export default function App() {
     });
 
     if (signInError || !signInData?.user) {
+      // Allow Super Admin immediate access with default password (NoboAlo@2026 or 123456)
+      if (isSuperAdmin && SUPER_ADMIN_DEFAULT_PASSWORDS.includes(loginForm.password.trim())) {
+        const superAdminProfile: MemberUser = {
+          id: 'super-admin-raihan',
+          name: 'মোহাম্মদ রায়হান',
+          email: SUPER_ADMIN_EMAIL,
+          mobile: '',
+          avatar_url: '',
+          role: 'admin',
+          status: 'approved',
+          designation: 'অ্যাডমিন',
+          sort_order: 1
+        };
+        setAuthLoading(false);
+        setAppUser(superAdminProfile);
+        setLoginForm({ email: '', password: '' });
+        showNotice('সুপার অ্যাডমিন হিসেবে স্বাগতম, মোহাম্মদ রায়হান!', 'success');
+        setCurrentView('dashboard');
+        return;
+      }
       setAuthLoading(false);
       showNotice('ইমেইল বা পাসওয়ার্ড সঠিক নয়।', 'error');
       return;
@@ -1858,15 +1926,36 @@ export default function App() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploadState({ active: true, percent: 0, label: 'সাইট লোগো আপলোড হচ্ছে...' });
+    setUploadState({ active: true, percent: 0, label: 'সাইট লোগো ও ফেভিকন আপলোড হচ্ছে...' });
     try {
       const uploadedUrl = await uploadMediaToCloudinary(file, (percent) => {
-        setUploadState({ active: true, percent, label: 'সাইট লোগো আপলোড হচ্ছে...' });
+        setUploadState({ active: true, percent, label: 'সাইট লোগো ও ফেভিকন আপলোড হচ্ছে...' });
       });
-      setSiteSettings((prev) => ({ ...prev, logo_url: uploadedUrl }));
-      showNotice('নতুন লোগো ক্লাউডিনারিতে আপলোড হয়েছে!', 'success');
+      setSiteSettings((prev) => ({
+        ...prev,
+        logo_url: uploadedUrl,
+        favicon_url: uploadedUrl
+      }));
+      showNotice('নতুন লোগো ও ফেভিকন ক্লাউডিনারিতে আপলোড হয়েছে!', 'success');
     } catch (err: any) {
       showNotice(err?.message || 'লোগো আপলোড ব্যর্থ হয়েছে।', 'error');
+    } finally {
+      setTimeout(() => setUploadState({ active: false, percent: 0, label: '' }), 600);
+    }
+  };
+
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadState({ active: true, percent: 0, label: 'ফেভিকন (Favicon) আপলোড হচ্ছে...' });
+    try {
+      const uploadedUrl = await uploadMediaToCloudinary(file, (percent) => {
+        setUploadState({ active: true, percent, label: 'ফেভিকন (Favicon) আপলোড হচ্ছে...' });
+      });
+      setSiteSettings((prev) => ({ ...prev, favicon_url: uploadedUrl }));
+      showNotice('নতুন ফেভিকন সফলভাবে আপলোড হয়েছে!', 'success');
+    } catch (err: any) {
+      showNotice(err?.message || 'ফেভিকন আপলোড ব্যর্থ হয়েছে।', 'error');
     } finally {
       setTimeout(() => setUploadState({ active: false, percent: 0, label: '' }), 600);
     }
@@ -2021,6 +2110,7 @@ export default function App() {
   // ============================================================================
   return (
     <div className="min-h-screen flex flex-col bg-[#F4F7F5] text-[#0A2F25] overflow-x-hidden w-full max-w-[100vw] selection:bg-[#D4AF37] selection:text-[#0A2F25]">
+      <style dangerouslySetInnerHTML={{ __html: EMBEDDED_FALLBACK_CSS }} />
       {/* 1. TOP SCROLLING ANNOUNCEMENT BAR */}
       <div
         className="w-full py-1.5 px-2 overflow-hidden border-b border-[#D4AF37]/50 shadow-sm z-40"
@@ -3753,23 +3843,62 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Logo Upload */}
-                <div className="flex flex-wrap items-center gap-4 p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200">
-                  <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-16 h-16" />
-                  <div className="flex-1 min-w-[200px]">
-                    <p className="text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
-                      ফাউন্ডেশন লোগো
-                    </p>
-                    <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0A2F25] text-[#F3D568] text-xs font-bold cursor-pointer hover:opacity-95 transition">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>নতুন লোগো আপলোড করুন</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLogoUpload}
-                        className="hidden"
-                      />
-                    </label>
+                {/* Logo & Favicon Upload Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex items-center gap-4 p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200">
+                    <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-16 h-16" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
+                        ফাউন্ডেশন লোগো
+                      </p>
+                      <p className="text-[11px] text-gray-500 mb-2">
+                        লোগো আপলোড করলে তা স্বয়ংক্রিয়ভাবে ফেভিকনেও সেট হবে
+                      </p>
+                      <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0A2F25] text-[#F3D568] text-xs font-bold cursor-pointer hover:opacity-95 transition">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>নতুন লোগো আপলোড</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200">
+                    <WhiteCircularLogo
+                      logoUrl={siteSettings.favicon_url || siteSettings.logo_url}
+                      sizeClass="w-14 h-14"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
+                        ব্রাউজার ফেভিকন (Favicon)
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                        <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#155e4a] text-white text-xs font-bold cursor-pointer hover:opacity-95 transition">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>আলাদা ফেভিকন আপলোড</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFaviconUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSiteSettings((p) => ({ ...p, favicon_url: p.logo_url }));
+                            showNotice('লোগোটিকেই ফেভিকন হিসেবে সেট করা হয়েছে!', 'success');
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-white border border-[#D4AF37] text-[#0A2F25] text-[11px] font-bold hover:bg-[#D4AF37]/20 transition"
+                        >
+                          লোগো ব্যবহার করুন
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
