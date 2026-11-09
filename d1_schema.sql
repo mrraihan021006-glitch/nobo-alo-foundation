@@ -10,18 +10,20 @@ CREATE TABLE IF NOT EXISTS site_settings (
   tagline TEXT DEFAULT 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।',
   announcement_text TEXT DEFAULT 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।',
   logo_url TEXT DEFAULT 'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/1772377523792_Nobo%20Alo%20Logo-03.png',
+  favicon_url TEXT DEFAULT 'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/Website%20favicon-03.png',
   banners TEXT DEFAULT '["","","",""]',
   auto_approve INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT OR IGNORE INTO site_settings (id, site_name, tagline, announcement_text, logo_url, banners, auto_approve)
+INSERT OR IGNORE INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, auto_approve)
 VALUES (
   1,
   'নব আলো ফাউন্ডেশন',
   'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।',
   'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।',
   'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/1772377523792_Nobo%20Alo%20Logo-03.png',
+  'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/Website%20favicon-03.png',
   '["","","",""]',
   0
 );
@@ -37,6 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
   status TEXT DEFAULT 'pending',
   designation TEXT DEFAULT 'সাধারণ সদস্য',
   sort_order INTEGER DEFAULT 100,
+  promoted_by TEXT DEFAULT '',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

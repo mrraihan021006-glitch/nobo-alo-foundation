@@ -41,6 +41,7 @@ async function ensureSchema(db: any) {
       status TEXT DEFAULT 'pending',
       designation TEXT DEFAULT 'সাধারণ সদস্য',
       sort_order INTEGER DEFAULT 100,
+      promoted_by TEXT DEFAULT '',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS activities (
@@ -110,7 +111,7 @@ export const onRequest = async (context: any) => {
     if (path === 'bootstrap' && method === 'GET') {
       const [settingsRes, usersRes, actRes, finRes, ideasRes, galRes] = await db.batch([
         db.prepare('SELECT * FROM site_settings WHERE id = 1'),
-        db.prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, created_at FROM users ORDER BY sort_order ASC'),
+        db.prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, created_at FROM users ORDER BY sort_order ASC'),
         db.prepare('SELECT * FROM activities ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM finances ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM ideas ORDER BY created_at DESC'),
@@ -188,7 +189,7 @@ export const onRequest = async (context: any) => {
         .run();
 
       const user = await db
-        .prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order FROM users WHERE email = ?')
+        .prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by FROM users WHERE email = ?')
         .bind(email)
         .first();
 
@@ -278,6 +279,7 @@ export const onRequest = async (context: any) => {
                status = COALESCE(?, status),
                designation = COALESCE(?, designation),
                sort_order = COALESCE(?, sort_order),
+               promoted_by = COALESCE(?, promoted_by),
                password_hash = COALESCE(?, password_hash)
            WHERE id = ?`
         )
@@ -288,6 +290,7 @@ export const onRequest = async (context: any) => {
           body.status ?? null,
           body.designation ?? null,
           body.sort_order ?? null,
+          body.promoted_by ?? null,
           pwHash,
           body.id
         )

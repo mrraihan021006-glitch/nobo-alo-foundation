@@ -98,6 +98,57 @@ table {
   scrollbar-width: none;
 }
 
+
+/* Glossy 3D Luxury Buttons & Shimmer Animations */
+@keyframes glossySweep {
+  0% { transform: translateX(-130%) skewX(-25deg); }
+  100% { transform: translateX(230%) skewX(-25deg); }
+}
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+.btn-glossy-gold {
+  position: relative;
+  overflow: hidden;
+  background-image: linear-gradient(135deg, #D4AF37 0%, #FFF2A6 48%, #D4AF37 100%);
+  box-shadow: 0 10px 25px -5px rgba(212, 175, 55, 0.52), inset 0 2px 2px rgba(255, 255, 255, 0.75), inset 0 -2px 4px rgba(138, 106, 20, 0.45);
+  border: 1px solid #FFF3B0;
+}
+.btn-glossy-gold::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.65) 50%, rgba(255,255,255,0) 100%);
+  transform: translateX(-130%) skewX(-25deg);
+  animation: glossySweep 4.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.btn-glossy-emerald {
+  position: relative;
+  overflow: hidden;
+  background-image: linear-gradient(135deg, #0A2F25 0%, #196B54 50%, #0A2F25 100%);
+  box-shadow: 0 10px 25px -5px rgba(10, 47, 37, 0.45), inset 0 1.5px 2px rgba(255, 255, 255, 0.35), inset 0 -2px 4px rgba(0, 0, 0, 0.4);
+  border: 1px solid #D4AF37;
+}
+.btn-glossy-emerald::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(243,213,104,0.35) 50%, rgba(255,255,255,0) 100%);
+  transform: translateX(-130%) skewX(-25deg);
+  animation: glossySweep 5s ease-in-out infinite;
+  pointer-events: none;
+}
+.bg-\[\#155e4a\]\/15 { background-color: rgba(21, 94, 74, 0.15); }
+.hover\:scale-\[1\.03\]:hover { transform: scale(1.03); }
+
 /* Core Layout & Positioning Utilities */
 .min-h-screen { min-height: 100vh; }
 .min-h-\[460px\] { min-height: 460px; }
