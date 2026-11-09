@@ -1,0 +1,8 @@
+name = "nobo-alo-foundation"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nobo-alo-db"
+database_id = "2c75ca5d-1dc3-4904-acb6-4ca6bd5202cd"

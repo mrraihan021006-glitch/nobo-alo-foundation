@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+  scroll-behavior: smooth;
+  background-color: #F4F7F5;
+  font-family: 'Hind Siliguri', 'Poppins', sans-serif;
+  color: #0A2F25;
+}
+
+.font-english {
+  font-family: 'Poppins', 'Hind Siliguri', sans-serif;
+}
+
+@keyframes mandalaSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes mandalaSpinReverse {
+  0% { transform: rotate(360deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.animate-mandala {
+  animation: mandalaSpin 65s linear infinite;
+}
+
+.animate-mandala-reverse {
+  animation: mandalaSpinReverse 80s linear infinite;
+}
+
+@keyframes marqueeScroll {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marqueeScroll 28s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
