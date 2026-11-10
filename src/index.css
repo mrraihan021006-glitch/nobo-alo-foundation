@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url("https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@600;700&family=Poppins:wght@400;500;600;700&display=swap");
+
+h1, h2 {
+  font-family: "Noto Serif Bengali", "Hind Siliguri", serif;
+  letter-spacing: -0.01em;
+}
+.sm\:col-span-2 { grid-column: span 2 / span 2; }
+.sm\:col-span-5 { grid-column: span 5 / span 5; }
+.lg\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.to-emerald-400 { --tw-gradient-to: #34d399; }
+.text-emerald-300 { color: #6ee7b7; }
+
 /* Pre-compiled Tailwind & Theme Stylesheet for Nobo Alo Foundation */
 *, ::before, ::after {
   box-sizing: border-box;

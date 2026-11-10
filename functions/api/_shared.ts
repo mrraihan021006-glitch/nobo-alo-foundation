@@ -59,6 +59,7 @@ async function ensureSchema(db: any) {
       favicon_url TEXT DEFAULT '',
       banners TEXT DEFAULT '["","","",""]',
       designations TEXT DEFAULT '',
+      campaigns TEXT DEFAULT '[]',
       auto_approve INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`),
@@ -115,6 +116,11 @@ async function ensureSchema(db: any) {
   const alterStatements = [
     `ALTER TABLE site_settings ADD COLUMN favicon_url TEXT DEFAULT ''`,
     `ALTER TABLE site_settings ADD COLUMN designations TEXT DEFAULT ''`,
+    `ALTER TABLE site_settings ADD COLUMN campaigns TEXT DEFAULT '[]'`,
+    `ALTER TABLE users ADD COLUMN blood_group TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN reminder_status TEXT DEFAULT 'auto'`,
+    `ALTER TABLE users ADD COLUMN reminder_note TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN promoted_by TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN fb_url TEXT DEFAULT ''`
   ];
@@ -247,7 +253,7 @@ export const onRequest = async (context: any) => {
     if ((path === 'bootstrap' || path === '') && method === 'GET') {
       const [settingsRes, usersRes, actRes, finRes, ideasRes, galRes] = await db.batch([
         db.prepare('SELECT * FROM site_settings WHERE id = 1'),
-        db.prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, created_at FROM users ORDER BY sort_order ASC'),
+        db.prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, bio, reminder_status, reminder_note, created_at FROM users ORDER BY sort_order ASC'),
         db.prepare('SELECT * FROM activities ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM finances ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM ideas ORDER BY created_at DESC'),
@@ -278,6 +284,16 @@ export const onRequest = async (context: any) => {
       const cleanLogo = cleanDeadSupabaseUrl(rawSettings.logo_url);
       const cleanFav = cleanDeadSupabaseUrl(rawSettings.favicon_url) || cleanLogo;
 
+      let parsedCampaigns: any[] = [];
+      try {
+        if (rawSettings.campaigns) {
+          const cArr = JSON.parse(rawSettings.campaigns);
+          if (Array.isArray(cArr)) parsedCampaigns = cArr;
+        }
+      } catch {
+        parsedCampaigns = [];
+      }
+
       const settings = {
         id: 1,
         site_name: rawSettings.site_name || 'নব আলো ফাউন্ডেশন',
@@ -287,6 +303,7 @@ export const onRequest = async (context: any) => {
         favicon_url: cleanFav,
         banners: parsedBanners,
         designations: parsedDesignations,
+        campaigns: parsedCampaigns,
         auto_approve: Boolean(rawSettings.auto_approve)
       };
 
@@ -315,12 +332,17 @@ export const onRequest = async (context: any) => {
       });
     }
 
-    // 2. POST /api/register (or /api/auth/register)
+    // 2. POST /api/register (or /api/auth/register) — Supports Email OR BD Phone Number
     if ((path === 'register' || path === 'auth/register') && method === 'POST') {
       const body = await request.json();
-      const email = String(body.email || '').trim().toLowerCase();
+      const rawIdentifier = String(body.identifier || body.email || body.mobile || '').trim();
+      const isEmailInput = rawIdentifier.includes('@');
+      const normalizedPhone = !isEmailInput ? normalizeBdMobile(rawIdentifier) : normalizeBdMobile(String(body.mobile || ''));
+      const email = isEmailInput
+        ? rawIdentifier.toLowerCase()
+        : (String(body.email || '').trim().toLowerCase() || `${normalizedPhone}@phone.noboalo.org`);
+      const mobile = normalizedPhone;
       const name = String(body.name || '').trim();
-      const mobile = normalizeBdMobile(String(body.mobile || ''));
       const password = String(body.password || '');
       const fb_url = String(body.fb_url || '').trim();
       const avatar_url = String(body.avatar_url || '').trim();
@@ -334,13 +356,24 @@ export const onRequest = async (context: any) => {
       const id = body.id || crypto.randomUUID();
       const pwHash = await hashPassword(password);
 
+      // Check if phone number already exists
+      if (mobile) {
+        const existingByPhone = await db
+          .prepare("SELECT id, email FROM users WHERE mobile = ? AND email != ? LIMIT 1")
+          .bind(mobile, email)
+          .first();
+        if (existingByPhone) {
+          return jsonResponse({ error: 'এই মোবাইল নাম্বার দিয়ে ইতিমধ্যে একটি একাউন্ট খোলা হয়েছে। অনুগ্রহ করে লগইন করুন।' }, 400);
+        }
+      }
+
       await db
         .prepare(
           `INSERT INTO users (id, name, email, mobile, password_hash, avatar_url, role, status, designation, sort_order, fb_url)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(email) DO UPDATE SET
              name=excluded.name,
-             mobile=excluded.mobile,
+             mobile=COALESCE(NULLIF(excluded.mobile, ''), users.mobile),
              password_hash=excluded.password_hash,
              fb_url=COALESCE(NULLIF(excluded.fb_url, ''), users.fb_url),
              avatar_url=COALESCE(NULLIF(excluded.avatar_url, ''), users.avatar_url)`
@@ -349,7 +382,7 @@ export const onRequest = async (context: any) => {
         .run();
 
       const user = await db
-        .prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url FROM users WHERE email = ?')
+        .prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, bio, reminder_status, reminder_note, created_at FROM users WHERE email = ?')
         .bind(email)
         .first();
 
@@ -422,11 +455,14 @@ export const onRequest = async (context: any) => {
       const cleanDesignations = Array.isArray(body.designations)
         ? JSON.stringify(body.designations)
         : null;
+      const cleanCampaigns = Array.isArray(body.campaigns)
+        ? JSON.stringify(body.campaigns)
+        : null;
 
       await db
         .prepare(
-          `INSERT INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, designations, auto_approve, updated_at)
-           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `INSERT INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, designations, campaigns, auto_approve, updated_at)
+           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(id) DO UPDATE SET
              site_name = COALESCE(excluded.site_name, site_settings.site_name),
              tagline = COALESCE(excluded.tagline, site_settings.tagline),
@@ -435,6 +471,7 @@ export const onRequest = async (context: any) => {
              favicon_url = COALESCE(excluded.favicon_url, site_settings.favicon_url),
              banners = COALESCE(excluded.banners, site_settings.banners),
              designations = COALESCE(excluded.designations, site_settings.designations),
+             campaigns = COALESCE(excluded.campaigns, site_settings.campaigns),
              auto_approve = COALESCE(excluded.auto_approve, site_settings.auto_approve),
              updated_at = CURRENT_TIMESTAMP`
         )
@@ -446,6 +483,7 @@ export const onRequest = async (context: any) => {
           cleanFav,
           cleanBanners,
           cleanDesignations,
+          cleanCampaigns,
           typeof body.auto_approve === 'boolean' ? (body.auto_approve ? 1 : 0) : null
         )
         .run();
@@ -522,10 +560,12 @@ export const onRequest = async (context: any) => {
       }
 
       const targetId = existing?.id || body.id;
+      const cleanEmailUpdate = body.email ? String(body.email).trim().toLowerCase() : null;
       await db
         .prepare(
           `UPDATE users
            SET name = COALESCE(?, name),
+               email = COALESCE(?, email),
                mobile = COALESCE(?, mobile),
                avatar_url = COALESCE(?, avatar_url),
                role = COALESCE(?, role),
@@ -534,11 +574,16 @@ export const onRequest = async (context: any) => {
                sort_order = COALESCE(?, sort_order),
                promoted_by = COALESCE(?, promoted_by),
                fb_url = COALESCE(?, fb_url),
+               blood_group = COALESCE(?, blood_group),
+               bio = COALESCE(?, bio),
+               reminder_status = COALESCE(?, reminder_status),
+               reminder_note = COALESCE(?, reminder_note),
                password_hash = COALESCE(?, password_hash)
            WHERE id = ?`
         )
         .bind(
           body.name ?? null,
+          cleanEmailUpdate,
           cleanMobile,
           body.avatar_url ?? null,
           body.role ?? null,
@@ -547,6 +592,10 @@ export const onRequest = async (context: any) => {
           body.sort_order ?? null,
           body.promoted_by ?? null,
           body.fb_url ?? null,
+          body.blood_group ?? null,
+          body.bio ?? null,
+          body.reminder_status ?? null,
+          body.reminder_note ?? null,
           pwHash,
           targetId
         )
