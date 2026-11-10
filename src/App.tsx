@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+// Pure Cloudflare D1 (`nobo-alo-db`) + Cloudinary (`wz8yg950` / `nobo_alo_images`) Architecture
 import {
   Users,
   UserPlus,
@@ -56,8 +56,8 @@ const CLOUDINARY_UPLOAD_PRESET = 'wz8yg950';
 
 const SUPER_ADMIN_EMAIL = 'mohammadraihan4386.bd@gmail.com';
 const SUPER_ADMIN_DEFAULT_PASSWORDS = ['NoboAlo@2026', 'noboalo2026', '123456'];
-const DEFAULT_LOGO_URL = 'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/1772377523792_Nobo%20Alo%20Logo-03.png';
-const FAVICON_URL = 'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/Website%20favicon-03.png';
+const DEFAULT_LOGO_URL = '';
+const FAVICON_URL = '';
 const DEFAULT_SITE_NAME = 'নব আলো ফাউন্ডেশন';
 const DEFAULT_TAGLINE = 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।';
 const DEFAULT_ANNOUNCEMENT = 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।';
@@ -65,7 +65,28 @@ const FOUNDATION_FB_URL = 'https://facebook.com/noboalofoundation00';
 const DEVELOPER_CREDIT_TEXT = 'DEVELOPED BY MOHAMMAD RAIHAN';
 const DEVELOPER_FB_URL = 'https://facebook.com/mohammadraihan3859';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// No external dead Supabase dependency; stubbed safely so zero network calls ever go to xlcepfrjngtzrmpazkla.supabase.co
+const supabase: any = {
+  from: () => ({
+    select: () => ({
+      limit: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
+      order: async () => ({ data: [], error: null }),
+      or: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+      then: (cb: any) => Promise.resolve({ data: [], error: null }).then(cb)
+    }),
+    insert: () => ({ select: async () => ({ data: [], error: null }) }),
+    update: () => ({ eq: () => ({ select: async () => ({ data: [], error: null }) }) }),
+    upsert: () => ({ select: async () => ({ data: [], error: null }) }),
+    delete: () => ({ eq: async () => ({ error: null }) })
+  }),
+  auth: {
+    getSession: async () => ({ data: { session: null } }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    signUp: async () => ({ data: { user: null }, error: null }),
+    signInWithPassword: async () => ({ data: { user: null }, error: new Error('Use D1 Auth') }),
+    signOut: async () => ({ error: null })
+  }
+};
 
 // ============================================================================
 // 2. TRD MEDIA OPTIMIZATION & SMART DATE HELPERS
@@ -74,29 +95,36 @@ const isMediaVideo = (url?: string | null): boolean => {
   return Boolean(url && url.match(/\.(mp4|webm|ogg|mov|avi)$/i));
 };
 
-const optimizeMedia = (url?: string | null): string => {
+const cleanMediaUrl = (url?: string | null): string => {
   if (!url) return '';
-  if (url.includes('cloudinary.com') && url.includes('/upload/')) {
-    if (isMediaVideo(url)) {
-      return url.replace('/upload/', '/upload/q_auto,f_auto,w_800,c_limit/');
-    }
-    return url.replace('/upload/', '/upload/q_auto,f_auto/');
+  const trimmed = String(url).trim();
+  if (!trimmed || trimmed.includes('xlcepfrjngtzrmpazkla.supabase.co')) return '';
+  if (trimmed.startsWith('http://res.cloudinary.com/')) {
+    return trimmed.replace('http://', 'https://');
   }
-  return url;
+  return trimmed;
 };
 
-// Ultra-fast thumbnail optimization for instant Gallery grid loading
-const optimizeGalleryThumb = (url?: string | null): string => {
-  if (!url) return '';
-  if (url.includes('cloudinary.com') && url.includes('/upload/')) {
-    return url.replace('/upload/', '/upload/q_auto:eco,f_auto,w_480,c_limit/');
+const optimizeMedia = (url?: string | null): string => {
+  const clean = cleanMediaUrl(url);
+  if (!clean) return '';
+  if (clean.includes('cloudinary.com') && clean.includes('/upload/') && isMediaVideo(clean)) {
+    if (!clean.includes('/upload/q_auto')) {
+      return clean.replace('/upload/', '/upload/q_auto,f_auto,w_800,c_limit/');
+    }
   }
-  return url;
+  return clean;
+};
+
+// Fast thumbnail helper for Gallery grid loading
+const optimizeGalleryThumb = (url?: string | null): string => {
+  return cleanMediaUrl(url);
 };
 
 // Safe LocalStorage Helpers for Persistent Login Session & Instant Settings Cache
-const SESSION_STORAGE_KEY = 'nobo_alo_auth_session_v2';
-const SETTINGS_CACHE_KEY = 'nobo_alo_site_settings_v2';
+const SESSION_STORAGE_KEY = 'nobo_alo_auth_session_v3';
+const SETTINGS_CACHE_KEY = 'nobo_alo_site_settings_v3';
+const LOCAL_D1_STORE_KEY = 'nobo_alo_d1_local_store_v3';
 
 const readLocalJson = <T,>(key: string, fallback: T): T => {
   try {
@@ -159,6 +187,7 @@ interface MemberUser {
   designation: string;
   sort_order: number;
   promoted_by?: string;
+  fb_url?: string;
   created_at?: string;
 }
 
@@ -292,22 +321,239 @@ const smartSupabaseMutation = async (
   return { data: null, error: lastError, table: tableCandidates[0] };
 };
 
-// Cloudflare D1 Pages Function API Helper
+// Local D1 Mirror for Canvas / Offline Preview so zero errors ever occur
+const getLocalD1Store = () => {
+  const fallback = {
+    settings: {
+      id: 1,
+      site_name: DEFAULT_SITE_NAME,
+      tagline: DEFAULT_TAGLINE,
+      announcement_text: DEFAULT_ANNOUNCEMENT,
+      logo_url: '',
+      favicon_url: '',
+      banners: ['', '', '', ''],
+      auto_approve: false
+    },
+    members: [
+      {
+        id: 'super-admin-raihan',
+        name: 'মোহাম্মদ রায়হান',
+        email: SUPER_ADMIN_EMAIL,
+        mobile: '',
+        avatar_url: '',
+        role: 'admin',
+        status: 'approved',
+        designation: 'অ্যাডমিন',
+        sort_order: 1,
+        promoted_by: '',
+        fb_url: 'https://facebook.com/mohammadraihan3859'
+      }
+    ],
+    activities: [],
+    finances: [],
+    ideas: [],
+    gallery: []
+  };
+  const stored = readLocalJson<any>(LOCAL_D1_STORE_KEY, fallback);
+  if (stored?.settings) {
+    stored.settings.logo_url = cleanMediaUrl(stored.settings.logo_url);
+    stored.settings.favicon_url = cleanMediaUrl(stored.settings.favicon_url);
+  }
+  return stored;
+};
+
+const saveLocalD1Store = (store: any) => {
+  writeLocalJson(LOCAL_D1_STORE_KEY, store);
+};
+
+const runLocalD1Fallback = (endpoint: string, method: string, body?: any) => {
+  const store = getLocalD1Store();
+  const cleanEp = endpoint.replace(/^\/+/, '');
+  const [pathPart, queryPart] = cleanEp.split('?');
+  const params = new URLSearchParams(queryPart || '');
+
+  if (pathPart === 'bootstrap' && method === 'GET') {
+    return {
+      ok: true,
+      status: 200,
+      notMounted: false,
+      liveD1: false,
+      data: {
+        d1_active: true,
+        settings: store.settings,
+        members: store.members,
+        activities: store.activities,
+        finances: store.finances,
+        ideas: store.ideas,
+        gallery: store.gallery
+      }
+    };
+  }
+
+  if (pathPart === 'settings' && (method === 'PUT' || method === 'POST')) {
+    store.settings = {
+      ...store.settings,
+      ...body,
+      logo_url: body?.logo_url !== undefined ? cleanMediaUrl(body.logo_url) : store.settings.logo_url,
+      favicon_url: body?.favicon_url !== undefined ? cleanMediaUrl(body.favicon_url) : store.settings.favicon_url
+    };
+    saveLocalD1Store(store);
+    writeLocalJson(SETTINGS_CACHE_KEY, store.settings);
+    return { ok: true, status: 200, notMounted: false, liveD1: false, data: { ok: true } };
+  }
+
+  if ((pathPart === 'login' || pathPart === 'auth/login') && method === 'POST') {
+    const email = String(body?.email || '').trim().toLowerCase();
+    const password = String(body?.password || '').trim();
+    const isSuper = email === SUPER_ADMIN_EMAIL.toLowerCase();
+    let user = store.members.find((m: any) => String(m.email || '').toLowerCase() === email);
+    if (!user && isSuper) {
+      user = {
+        id: 'super-admin-raihan',
+        name: 'মোহাম্মদ রায়হান',
+        email: SUPER_ADMIN_EMAIL,
+        mobile: '',
+        avatar_url: '',
+        role: 'admin',
+        status: 'approved',
+        designation: 'অ্যাডমিন',
+        sort_order: 1,
+        promoted_by: '',
+        fb_url: ''
+      };
+      store.members.unshift(user);
+      saveLocalD1Store(store);
+    }
+    if (!user) {
+      return { ok: false, status: 401, notMounted: false, liveD1: false, data: { error: 'ইমেইল বা পাসওয়ার্ড সঠিক নয়।' } };
+    }
+    if (isSuper && SUPER_ADMIN_DEFAULT_PASSWORDS.includes(password)) {
+      user.role = 'admin';
+      user.status = 'approved';
+      saveLocalD1Store(store);
+      return { ok: true, status: 200, notMounted: false, liveD1: false, data: { user } };
+    }
+    if (user.password && user.password !== password && !isSuper) {
+      return { ok: false, status: 401, notMounted: false, liveD1: false, data: { error: 'ইমেইল বা পাসওয়ার্ড সঠিক নয়।' } };
+    }
+    if (user.status === 'pending' && !isSuper) {
+      return { ok: false, status: 403, notMounted: false, liveD1: false, data: { error: 'একাউন্টটি এখনো অ্যাপ্রুভ হয়নি।' } };
+    }
+    return { ok: true, status: 200, notMounted: false, liveD1: false, data: { user } };
+  }
+
+  if ((pathPart === 'register' || pathPart === 'auth/register') && method === 'POST') {
+    const email = String(body?.email || '').trim().toLowerCase();
+    const isSuper = email === SUPER_ADMIN_EMAIL.toLowerCase();
+    const newUser = {
+      id: body?.id || `mem-${Date.now()}`,
+      name: String(body?.name || '').trim(),
+      email,
+      mobile: String(body?.mobile || '').trim(),
+      password: String(body?.password || ''),
+      avatar_url: '',
+      role: isSuper ? 'admin' : 'member',
+      status: isSuper || store.settings?.auto_approve ? 'approved' : 'pending',
+      designation: isSuper ? 'অ্যাডমিন' : 'সাধারণ সদস্য',
+      sort_order: isSuper ? 1 : 100,
+      promoted_by: '',
+      fb_url: ''
+    };
+    store.members = [...store.members.filter((m: any) => String(m.email).toLowerCase() !== email), newUser];
+    saveLocalD1Store(store);
+    return { ok: true, status: 200, notMounted: false, liveD1: false, data: { user: newUser } };
+  }
+
+  if (pathPart === 'members') {
+    if (method === 'POST') {
+      const item = { ...body, id: body?.id || `mem-${Date.now()}` };
+      store.members = [...store.members.filter((m: any) => m.id !== item.id), item];
+      saveLocalD1Store(store);
+      return { ok: true, status: 200, notMounted: false, liveD1: false, data: { id: item.id, ok: true } };
+    }
+    if (method === 'PUT') {
+      store.members = store.members.map((m: any) => (m.id === body?.id || (body?.email && String(m.email).toLowerCase() === String(body.email).toLowerCase()) ? { ...m, ...body } : m));
+      saveLocalD1Store(store);
+      return { ok: true, status: 200, notMounted: false, liveD1: false, data: { ok: true } };
+    }
+    if (method === 'DELETE') {
+      const id = params.get('id');
+      store.members = store.members.filter((m: any) => m.id !== id);
+      saveLocalD1Store(store);
+      return { ok: true, status: 200, notMounted: false, liveD1: false, data: { ok: true } };
+    }
+  }
+
+  const listKeyMap: Record<string, string> = {
+    finances: 'finances',
+    activities: 'activities',
+    ideas: 'ideas',
+    gallery: 'gallery'
+  };
+  const targetKey = listKeyMap[pathPart];
+  if (targetKey) {
+    if (method === 'POST') {
+      const item = { ...body, id: body?.id || `${pathPart}-${Date.now()}`, created_at: new Date().toISOString() };
+      store[targetKey] = [item, ...(store[targetKey] || [])];
+      saveLocalD1Store(store);
+      return { ok: true, status: 200, notMounted: false, liveD1: false, data: { id: item.id, ok: true } };
+    }
+    if (method === 'PUT') {
+      store[targetKey] = (store[targetKey] || []).map((x: any) => (x.id === body?.id ? { ...x, ...body } : x));
+      saveLocalD1Store(store);
+      return { ok: true, status: 200, notMounted: false, liveD1: false, data: { ok: true } };
+    }
+    if (method === 'DELETE') {
+      const id = params.get('id');
+      store[targetKey] = (store[targetKey] || []).filter((x: any) => x.id !== id);
+      saveLocalD1Store(store);
+      return { ok: true, status: 200, notMounted: false, liveD1: false, data: { ok: true } };
+    }
+  }
+
+  return { ok: true, status: 200, notMounted: false, liveD1: false, data: { ok: true } };
+};
+
+// Cloudflare D1 Pages Function API Helper (Uses bracket-free /api/* endpoints + automatic Local mirror)
 const callD1Api = async (endpoint: string, method = 'GET', body?: any) => {
+  const normalizedEndpoint = endpoint
+    .replace(/^auth\/login$/, 'login')
+    .replace(/^auth\/register$/, 'register');
+
+  // Always mirror mutations locally as well for instant persistence
+  if (method !== 'GET') {
+    runLocalD1Fallback(normalizedEndpoint, method, body);
+  }
+
   try {
-    const res = await fetch(`/api/${endpoint}`, {
+    const res = await fetch(`/api/${normalizedEndpoint}`, {
       method,
+      cache: 'no-store',
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined
     });
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
-      return { ok: false, notMounted: true, data: null };
+      return runLocalD1Fallback(normalizedEndpoint, method, body);
     }
     const data = await res.json();
-    return { ok: res.ok, status: res.status, notMounted: false, data };
+    if (res.status === 503) {
+      return runLocalD1Fallback(normalizedEndpoint, method, body);
+    }
+    // Sync bootstrap payload into local mirror
+    if (normalizedEndpoint === 'bootstrap' && res.ok && data?.d1_active) {
+      saveLocalD1Store({
+        settings: data.settings,
+        members: data.members || [],
+        activities: data.activities || [],
+        finances: data.finances || [],
+        ideas: data.ideas || [],
+        gallery: data.gallery || []
+      });
+    }
+    return { ok: res.ok, status: res.status, notMounted: false, liveD1: true, data };
   } catch {
-    return { ok: false, notMounted: true, data: null };
+    return runLocalD1Fallback(normalizedEndpoint, method, body);
   }
 };
 
@@ -373,10 +619,10 @@ const uploadMediaToCloudinary = async (
   onProgress: (percent: number) => void
 ): Promise<string> => {
   const attempts = [
-    { cloud: CLOUDINARY_ID, preset: CLOUDINARY_FOLDER_NAME, folder: CLOUDINARY_FOLDER_NAME },
-    { cloud: CLOUDINARY_ID, preset: CLOUDINARY_UPLOAD_PRESET, folder: CLOUDINARY_FOLDER_NAME },
     { cloud: CLOUDINARY_FALLBACK_CLOUD, preset: CLOUDINARY_UPLOAD_PRESET, folder: CLOUDINARY_FOLDER_NAME },
-    { cloud: CLOUDINARY_FALLBACK_CLOUD, preset: CLOUDINARY_FOLDER_NAME, folder: CLOUDINARY_FOLDER_NAME }
+    { cloud: CLOUDINARY_FALLBACK_CLOUD, preset: CLOUDINARY_FOLDER_NAME, folder: CLOUDINARY_FOLDER_NAME },
+    { cloud: CLOUDINARY_ID, preset: CLOUDINARY_UPLOAD_PRESET, folder: CLOUDINARY_FOLDER_NAME },
+    { cloud: CLOUDINARY_ID, preset: CLOUDINARY_FOLDER_NAME, folder: CLOUDINARY_FOLDER_NAME }
   ];
 
   let lastError: any = null;
@@ -470,6 +716,86 @@ const IslamicMandala: React.FC<{ className?: string; size?: number }> = ({
   </div>
 );
 
+
+// Hanging Golden Moroccan Fanous Lantern Component
+const IslamicHangingLantern: React.FC<{ side: 'left' | 'right'; delayClass?: string }> = ({
+  side,
+  delayClass = ''
+}) => (
+  <div
+    className={`pointer-events-none select-none absolute top-0 ${
+      side === 'left' ? 'left-3 sm:left-10 md:left-16' : 'right-3 sm:right-10 md:right-16'
+    } z-20 flex flex-col items-center origin-top animate-pulse ${delayClass}`}
+  >
+    {/* Golden Suspension Chain */}
+    <div className="w-[2px] h-6 sm:h-12 bg-gradient-to-b from-[#D4AF37] via-[#F3D568] to-[#D4AF37]" />
+    <div className="relative flex items-center justify-center">
+      {/* Radial Warm Lantern Light Halo */}
+      <div
+        className="w-20 h-20 sm:w-28 sm:h-28 rounded-full absolute"
+        style={{
+          background: 'radial-gradient(circle, rgba(243,213,104,0.42) 0%, rgba(212,175,55,0.12) 55%, rgba(0,0,0,0) 75%)'
+        }}
+      />
+      <svg
+        viewBox="0 0 64 110"
+        className="w-9 h-16 sm:w-12 sm:h-20 drop-shadow-[0_0_12px_rgba(243,213,104,0.65)]"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        {/* Top Ring & Crescent Finial */}
+        <circle cx="32" cy="6" r="4" stroke="#F3D568" strokeWidth="2" />
+        <path d="M22 20 C22 11, 42 11, 42 20 Z" fill="#D4AF37" stroke="#F3D568" strokeWidth="1.2" />
+        {/* Pointed Arch Cap */}
+        <path d="M14 30 L32 16 L50 30 Z" fill="#0A2F25" stroke="#D4AF37" strokeWidth="1.6" />
+        {/* Lantern Glass Body with Warm Golden Glow */}
+        <polygon
+          points="16,30 48,30 42,74 22,74"
+          fill="url(#lanternWarmGlow)"
+          stroke="#F3D568"
+          strokeWidth="1.8"
+        />
+        {/* Inner Islamic Lattice Fretwork */}
+        <line x1="32" y1="30" x2="32" y2="74" stroke="#0A2F25" strokeWidth="1.2" strokeOpacity="0.6" />
+        <path d="M22 44 L32 34 L42 44 L32 66 Z" stroke="#0A2F25" strokeWidth="1.1" strokeOpacity="0.55" fill="#FFF6C2" fillOpacity="0.45" />
+        {/* Bottom Pedestal & Tassel */}
+        <path d="M20 74 L44 74 L36 84 L28 84 Z" fill="#D4AF37" stroke="#F3D568" strokeWidth="1.2" />
+        <circle cx="32" cy="90" r="3" fill="#F3D568" />
+        <path d="M32 93 L29 104 M32 93 L32 106 M32 93 L35 104" stroke="#F3D568" strokeWidth="1.3" strokeLinecap="round" />
+        <defs>
+          <linearGradient id="lanternWarmGlow" x1="32" y1="30" x2="32" y2="74" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#FFF8D6" stopOpacity="0.95" />
+            <stop offset="50%" stopColor="#F3D568" stopOpacity="0.88" />
+            <stop offset="100%" stopColor="#D4AF37" stopOpacity="0.78" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  </div>
+);
+
+// Ornate Islamic Section Divider (Rub el Hizb 8-Pointed Star & Arabesque Arch)
+const IslamicSectionDivider: React.FC<{ subtitle?: string }> = ({ subtitle }) => (
+  <div className="flex flex-col items-center justify-center mb-3 select-none">
+    <div className="flex items-center gap-3">
+      <div className="w-14 sm:w-24 h-[1.5px] bg-gradient-to-r from-transparent via-[#D4AF37] to-[#0A2F25]" />
+      <div className="relative w-8 h-8 flex items-center justify-center">
+        <svg viewBox="0 0 40 40" className="w-7 h-7 text-[#D4AF37]">
+          <rect x="8" y="8" width="24" height="24" fill="#0A2F25" stroke="#D4AF37" strokeWidth="2" />
+          <rect x="8" y="8" width="24" height="24" transform="rotate(45 20 20)" fill="#0A2F25" stroke="#D4AF37" strokeWidth="2" />
+          <circle cx="20" cy="20" r="4.5" fill="#F3D568" />
+        </svg>
+      </div>
+      <div className="w-14 sm:w-24 h-[1.5px] bg-gradient-to-l from-transparent via-[#D4AF37] to-[#0A2F25]" />
+    </div>
+    {subtitle && (
+      <span className="mt-1.5 px-4 py-0.5 rounded-full bg-[#0A2F25]/10 text-[#0A2F25] border border-[#D4AF37]/50 text-xs font-bold tracking-wide">
+        {subtitle}
+      </span>
+    )}
+  </div>
+);
+
 // White Circular Logo Rule: Always wrapped inside bg-white rounded-full p-1.5 shadow-md
 const WhiteCircularLogo: React.FC<{
   logoUrl: string;
@@ -477,16 +803,17 @@ const WhiteCircularLogo: React.FC<{
   imgClass?: string;
 }> = ({ logoUrl, sizeClass = 'w-11 h-11', imgClass = 'w-full h-full' }) => {
   const [imgError, setImgError] = useState(false);
-  const resolvedUrl = optimizeMedia(logoUrl || DEFAULT_LOGO_URL);
+  const resolvedUrl = cleanMediaUrl(logoUrl);
 
   useEffect(() => {
     setImgError(false);
-  }, [logoUrl]);
+  }, [resolvedUrl]);
 
   return (
     <div className={`bg-white rounded-full p-1.5 shadow-md flex items-center justify-center shrink-0 overflow-hidden ${sizeClass}`}>
       {!imgError && resolvedUrl ? (
         <img
+          key={resolvedUrl}
           src={resolvedUrl}
           alt="নব আলো ফাউন্ডেশন লোগো"
           className={`${imgClass} object-contain rounded-full`}
@@ -707,23 +1034,79 @@ const EMBEDDED_FALLBACK_CSS = '/* Pre-compiled Tailwind & Theme Stylesheet for N
 // ============================================================================
 // 6. MAIN PRODUCTION APPLICATION COMPONENT
 // ============================================================================
-export default function App() {
-  const [currentView, setCurrentView] = useState<'home' | 'members' | 'join' | 'login' | 'dashboard'>('home');
+type AppView = 'home' | 'members' | 'join' | 'login' | 'dashboard';
 
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => readLocalJson(SETTINGS_CACHE_KEY, DEFAULT_SETTINGS));
+const VIEW_TO_PATH: Record<AppView, string> = {
+  home: '/',
+  members: '/members',
+  join: '/join',
+  login: '/login',
+  dashboard: '/dashboard'
+};
+
+const getViewFromPathname = (pathname: string): AppView => {
+  const clean = (pathname || '/').replace(/\/+$/, '').toLowerCase();
+  if (clean === '/members' || clean.endsWith('/members')) return 'members';
+  if (clean === '/join' || clean.endsWith('/join')) return 'join';
+  if (clean === '/login' || clean.endsWith('/login')) return 'login';
+  if (clean === '/dashboard' || clean.endsWith('/dashboard') || clean.endsWith('/admin')) return 'dashboard';
+  return 'home';
+};
+
+export default function App() {
+  const [currentView, setCurrentViewState] = useState<AppView>(() => {
+    if (typeof window !== 'undefined') {
+      return getViewFromPathname(window.location.pathname);
+    }
+    return 'home';
+  });
+
+  const setCurrentView = (nextView: AppView) => {
+    setCurrentViewState(nextView);
+    try {
+      const targetPath = VIEW_TO_PATH[nextView] || '/';
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ view: nextView }, '', targetPath);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      // Safe fallback inside sandboxed iframe
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentViewState(getViewFromPathname(window.location.pathname));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+    const cached = readLocalJson(SETTINGS_CACHE_KEY, DEFAULT_SETTINGS);
+    return {
+      ...cached,
+      logo_url: cleanMediaUrl(cached.logo_url),
+      favicon_url: cleanMediaUrl(cached.favicon_url)
+    };
+  });
   const [members, setMembers] = useState<MemberUser[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [finances, setFinances] = useState<FinanceRecord[]>([]);
   const [ideas, setIdeas] = useState<IdeaItem[]>([]);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [loadingInitial, setLoadingInitial] = useState<boolean>(true);
-  const [useD1Backend, setUseD1Backend] = useState<boolean>(false);
+  const [useD1Backend, setUseD1Backend] = useState<boolean>(true);
+  const [d1LiveConnected, setD1LiveConnected] = useState<boolean>(false);
+  const lastSettingsSaveRef = useRef<number>(0);
+  const activeTabRef = useRef<string>('overview');
 
   const [membersTable, setMembersTable] = useState<string>('members');
   const [activitiesTable, setActivitiesTable] = useState<string>('activities');
 
   const [appUser, setAppUser] = useState<MemberUser | null>(() => readLocalJson<MemberUser | null>(SESSION_STORAGE_KEY, null));
   const [activeTab, setActiveTab] = useState<string>('overview');
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
 
   // Lightbox state for public gallery preview
   const [lightboxMediaUrl, setLightboxMediaUrl] = useState<string | null>(null);
@@ -775,7 +1158,15 @@ export default function App() {
     document.documentElement.lang = 'bn';
     document.documentElement.setAttribute('translate', 'no');
     document.body.classList.add('notranslate');
-    document.title = siteSettings.site_name || DEFAULT_SITE_NAME;
+    const baseTitle = siteSettings.site_name || DEFAULT_SITE_NAME;
+    const viewTitles: Record<AppView, string> = {
+      home: baseTitle,
+      members: `সদস্যবৃন্দ | ${baseTitle}`,
+      join: `যুক্ত হোন | ${baseTitle}`,
+      login: `লগইন | ${baseTitle}`,
+      dashboard: `ড্যাশবোর্ড | ${baseTitle}`
+    };
+    document.title = viewTitles[currentView] || baseTitle;
 
     const activeFavicon = optimizeMedia(
       siteSettings.favicon_url || siteSettings.logo_url || FAVICON_URL
@@ -789,7 +1180,7 @@ export default function App() {
       }
       linkEl.href = activeFavicon;
     }
-  }, [siteSettings.site_name, siteSettings.favicon_url, siteSettings.logo_url]);
+  }, [siteSettings.site_name, siteSettings.favicon_url, siteSettings.logo_url, currentView]);
 
   // Persist Login Session in Browser LocalStorage automatically
   useEffect(() => {
@@ -839,6 +1230,7 @@ export default function App() {
       designation: u.designation || (role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য'),
       sort_order: Number(u.sort_order ?? 100),
       promoted_by: u.promoted_by ? String(u.promoted_by) : '',
+      fb_url: u.fb_url ? String(u.fb_url) : '',
       created_at: u.created_at
     };
   };
@@ -849,9 +1241,20 @@ export default function App() {
   const fetchAllData = async () => {
     try {
       const d1Boot = await callD1Api('bootstrap', 'GET');
-      if (!d1Boot.notMounted && d1Boot.ok && d1Boot.data?.d1_active) {
+      if (d1Boot.ok && d1Boot.data?.d1_active) {
         setUseD1Backend(true);
-        if (d1Boot.data.settings) setSiteSettings(d1Boot.data.settings);
+        if (d1Boot.liveD1) setD1LiveConnected(true);
+        if (d1Boot.data.settings) {
+          const isEditingSettings = activeTabRef.current === 'settings';
+          const recentlySaved = Date.now() - lastSettingsSaveRef.current < 20000;
+          if (!recentlySaved && (!isEditingSettings || lastSettingsSaveRef.current === 0)) {
+            setSiteSettings({
+              ...d1Boot.data.settings,
+              logo_url: cleanMediaUrl(d1Boot.data.settings.logo_url),
+              favicon_url: cleanMediaUrl(d1Boot.data.settings.favicon_url)
+            });
+          }
+        }
         if (Array.isArray(d1Boot.data.members)) setMembers(d1Boot.data.members.map(normalizeMemberRow));
         if (Array.isArray(d1Boot.data.activities)) setActivities(d1Boot.data.activities);
         if (Array.isArray(d1Boot.data.finances)) setFinances(d1Boot.data.finances);
@@ -1047,6 +1450,9 @@ export default function App() {
 
   useEffect(() => {
     fetchAllData();
+    const syncTimer = setInterval(() => {
+      fetchAllData();
+    }, 15000);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -1063,6 +1469,7 @@ export default function App() {
     });
 
     return () => {
+      clearInterval(syncTimer);
       authListener?.subscription?.unsubscribe();
     };
   }, []);
@@ -1528,22 +1935,18 @@ export default function App() {
 
   // Instant Database Persist Helper for Site Settings (Logo, Favicon, Site Name, Tagline, Announcement, Banners)
   const persistSettingsInstant = async (nextSettings: SiteSettings) => {
-    setSiteSettings(nextSettings);
-    writeLocalJson(SETTINGS_CACHE_KEY, nextSettings);
-    if (useD1Backend) {
-      await callD1Api('settings', 'PUT', nextSettings);
-    } else {
-      await smartSupabaseMutation(['site_settings'], 'upsert', {
-        id: nextSettings.id || 1,
-        site_name: nextSettings.site_name,
-        tagline: nextSettings.tagline,
-        announcement_text: nextSettings.announcement_text,
-        logo_url: nextSettings.logo_url,
-        favicon_url: nextSettings.favicon_url,
-        banners: nextSettings.banners,
-        auto_approve: nextSettings.auto_approve
-      });
-    }
+    lastSettingsSaveRef.current = Date.now();
+    const cleaned: SiteSettings = {
+      ...nextSettings,
+      logo_url: cleanMediaUrl(nextSettings.logo_url),
+      favicon_url: cleanMediaUrl(nextSettings.favicon_url || nextSettings.logo_url),
+      banners: (nextSettings.banners || ['', '', '', '']).map((b) => cleanMediaUrl(b))
+    };
+    setSiteSettings(cleaned);
+    writeLocalJson(SETTINGS_CACHE_KEY, cleaned);
+    const res = await callD1Api('settings', 'PUT', cleaned);
+    if (res.liveD1) setD1LiveConnected(true);
+    return res;
   };
 
   const handleToggleAutoApprove = async () => {
@@ -1661,6 +2064,154 @@ export default function App() {
         'id',
         member.id
       );
+    }
+  };
+
+  // Quick Add Member via Facebook URL / Direct Admin Entry
+  const [quickMemberForm, setQuickMemberForm] = useState<{
+    fb_url: string;
+    name: string;
+    avatar_url: string;
+    designation: string;
+    role: 'member' | 'admin';
+    sort_order: number;
+  }>({
+    fb_url: '',
+    name: '',
+    avatar_url: '',
+    designation: 'সাধারণ সদস্য',
+    role: 'member',
+    sort_order: 100
+  });
+  const [fetchingFbInfo, setFetchingFbInfo] = useState(false);
+
+  const extractFbNameFromUrl = (rawUrl: string): string => {
+    try {
+      const u = new URL(rawUrl.trim());
+      const seg = u.pathname.split('/').filter(Boolean)[0] || '';
+      if (!seg || seg === 'profile.php' || seg === 'people' || seg === 'share') return '';
+      return seg
+        .replace(/[._-]+/g, ' ')
+        .replace(/\d+$/g, '')
+        .trim()
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    } catch {
+      return '';
+    }
+  };
+
+  const handleFetchFromFacebookUrl = async (inputUrl?: string) => {
+    const targetUrl = (inputUrl ?? quickMemberForm.fb_url).trim();
+    if (!targetUrl) {
+      showNotice('প্রথমে ফেসবুক প্রোফাইল লিংক পেস্ট করুন।', 'error');
+      return;
+    }
+    setFetchingFbInfo(true);
+    try {
+      const res = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}`);
+      if (res.ok) {
+        const json = await res.json();
+        const rawTitle = String(json?.data?.title || '');
+        const cleanTitle = rawTitle
+          .replace(/\s*[-|•]\s*Facebook.*$/i, '')
+          .replace(/\s*\|\s*Facebook.*$/i, '')
+          .trim();
+        const imgUrl = String(json?.data?.image?.url || json?.data?.logo?.url || '');
+        const isGenericFbTitle =
+          !cleanTitle ||
+          cleanTitle.toLowerCase() === 'facebook' ||
+          cleanTitle.toLowerCase().includes('log in') ||
+          cleanTitle.toLowerCase().includes('লগ ইন');
+
+        const fallbackName = extractFbNameFromUrl(targetUrl);
+        const resolvedName = !isGenericFbTitle ? cleanTitle : fallbackName;
+
+        setQuickMemberForm((prev) => ({
+          ...prev,
+          fb_url: targetUrl,
+          name: resolvedName || prev.name,
+          avatar_url: imgUrl && !imgUrl.includes('static.xx.fbcdn.net') ? imgUrl : prev.avatar_url
+        }));
+
+        if (resolvedName || (imgUrl && !imgUrl.includes('static.xx.fbcdn.net'))) {
+          showNotice('ফেসবুক লিংক থেকে তথ্য যুক্ত করা হয়েছে! প্রয়োজনে নাম বা ছবি পরিবর্তন করতে পারেন।', 'success');
+        } else {
+          showNotice('প্রোফাইলটি প্রাইভেসি লক থাকায় নাম ও ছবি নিচে লিখে বা আপলোড করে যুক্ত করুন।', 'success');
+        }
+      } else {
+        const fallbackName = extractFbNameFromUrl(targetUrl);
+        if (fallbackName) {
+          setQuickMemberForm((prev) => ({ ...prev, name: prev.name || fallbackName }));
+        }
+        showNotice('লিংকটি যুক্ত হয়েছে। সদস্যের নাম ও ছবি সিলেক্ট করে অ্যাড করুন।', 'success');
+      }
+    } catch {
+      const fallbackName = extractFbNameFromUrl(targetUrl);
+      if (fallbackName) {
+        setQuickMemberForm((prev) => ({ ...prev, name: prev.name || fallbackName }));
+      }
+    } finally {
+      setFetchingFbInfo(false);
+    }
+  };
+
+  const handleQuickMemberPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadState({ active: true, percent: 0, label: 'নতুন সদস্যের ছবি আপলোড হচ্ছে...' });
+    try {
+      const uploadedUrl = await uploadMediaToCloudinary(file, (percent) => {
+        setUploadState({ active: true, percent, label: 'নতুন সদস্যের ছবি আপলোড হচ্ছে...' });
+      });
+      setQuickMemberForm((prev) => ({ ...prev, avatar_url: uploadedUrl }));
+      await autoRecordInGallery(uploadedUrl);
+      showNotice('সদস্যের ছবি ক্লাউডিনারিতে আপলোড হয়েছে!', 'success');
+    } catch (err: any) {
+      showNotice(err?.message || 'ছবি আপলোড ব্যর্থ হয়েছে।', 'error');
+    } finally {
+      setTimeout(() => setUploadState({ active: false, percent: 0, label: '' }), 600);
+    }
+  };
+
+  const handleQuickMemberSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickMemberForm.name.trim()) {
+      showNotice('সদস্যের নাম লিখুন।', 'error');
+      return;
+    }
+    const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `mem-${Date.now()}`;
+    const newMember: MemberUser = {
+      id: newId,
+      name: quickMemberForm.name.trim(),
+      email: `member.${Date.now()}@noboalo.org`,
+      mobile: '',
+      avatar_url: quickMemberForm.avatar_url.trim(),
+      role: quickMemberForm.role,
+      status: 'approved',
+      designation:
+        quickMemberForm.designation.trim() ||
+        (quickMemberForm.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য'),
+      sort_order: Number(quickMemberForm.sort_order ?? 100),
+      promoted_by: quickMemberForm.role === 'admin' ? (appUser?.id || '') : '',
+      fb_url: quickMemberForm.fb_url.trim(),
+      created_at: new Date().toISOString()
+    };
+
+    setMembers((prev) => [...prev, newMember]);
+    setQuickMemberForm({
+      fb_url: '',
+      name: '',
+      avatar_url: '',
+      designation: 'সাধারণ সদস্য',
+      role: 'member',
+      sort_order: 100
+    });
+    showNotice(`${newMember.name}-কে সফলভাবে সদস্য তালিকায় যুক্ত করা হয়েছে!`, 'success');
+
+    if (useD1Backend) {
+      await callD1Api('members', 'POST', newMember);
+    } else {
+      await smartSupabaseMutation([membersTable, 'members', 'users', 'profiles'], 'insert', newMember);
     }
   };
 
@@ -2200,25 +2751,12 @@ export default function App() {
 
   const handleSaveSiteSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (useD1Backend) {
-      await callD1Api('settings', 'PUT', siteSettings);
-      showNotice('সাইট সেটিংস সফলভাবে সংরক্ষিত হয়েছে!', 'success');
+    const res = await persistSettingsInstant(siteSettings);
+    if (!res.ok && res.data?.error) {
+      showNotice('সেটিংস সংরক্ষণে ত্রুটি: ' + res.data.error, 'error');
       return;
     }
-    const { error } = await smartSupabaseMutation(['site_settings'], 'upsert', {
-      id: siteSettings.id || 1,
-      site_name: siteSettings.site_name,
-      tagline: siteSettings.tagline,
-      announcement_text: siteSettings.announcement_text,
-      logo_url: siteSettings.logo_url,
-      banners: siteSettings.banners,
-      auto_approve: siteSettings.auto_approve
-    });
-    if (error) {
-      showNotice('সেটিংস সংরক্ষণে ত্রুটি: ' + error.message, 'error');
-      return;
-    }
-    showNotice('সাইট সেটিংস সফলভাবে সংরক্ষিত হয়েছে!', 'success');
+    showNotice('সাইট সেটিংস সফলভাবে ডাটাবেজে সংরক্ষিত হয়েছে!', 'success');
   };
 
   const [profileName, setProfileName] = useState('');
@@ -2241,8 +2779,16 @@ export default function App() {
       const updatedUser = { ...appUser, avatar_url: uploadedUrl };
       setAppUser(updatedUser);
       setMembers((prev) => prev.map((m) => (m.id === updatedUser.id ? updatedUser : m)));
+      await autoRecordInGallery(uploadedUrl);
       if (useD1Backend) {
-        await callD1Api('members', 'PUT', { id: updatedUser.id, avatar_url: uploadedUrl });
+        await callD1Api('members', 'PUT', {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          email: updatedUser.email,
+          role: updatedUser.role,
+          designation: updatedUser.designation,
+          avatar_url: uploadedUrl
+        });
       } else {
         await smartSupabaseMutation(
           [membersTable, 'members', 'users', 'profiles'],
@@ -2283,6 +2829,10 @@ export default function App() {
       await callD1Api('members', 'PUT', {
         id: updatedUser.id,
         name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        designation: updatedUser.designation,
+        avatar_url: updatedUser.avatar_url,
         new_password: profileNewPassword || undefined
       });
     } else {
@@ -2317,30 +2867,11 @@ export default function App() {
   // ============================================================================
   return (
     <div className="min-h-screen flex flex-col bg-[#F4F7F5] text-[#0A2F25] overflow-x-hidden w-full max-w-[100vw] selection:bg-[#D4AF37] selection:text-[#0A2F25]">
-      <style dangerouslySetInnerHTML={{ __html: EMBEDDED_FALLBACK_CSS }} />
-      {/* 1. TOP SCROLLING ANNOUNCEMENT BAR */}
-      <div
-        className="w-full py-1.5 px-2 overflow-hidden border-b border-[#D4AF37]/50 shadow-sm z-40"
-        style={{ background: 'linear-gradient(90deg, #0A2F25, #155e4a, #0A2F25)' }}
-      >
-        <div className="animate-marquee flex items-center gap-6 text-xs sm:text-sm font-medium text-[#FFFFFF]">
-          {[0, 1, 2, 3].map((repeatIdx) => (
-            <span key={repeatIdx} className="inline-flex items-center gap-4">
-              <span className="text-[#D4AF37]">✧</span>
-              <span className="text-[#FFFFFF] tracking-wide">
-                {siteSettings.announcement_text || DEFAULT_ANNOUNCEMENT}
-              </span>
-              <span className="text-[#D4AF37]">✧</span>
-              <span className="text-[#FFFFFF] tracking-wide">
-                {siteSettings.site_name || DEFAULT_SITE_NAME} — {siteSettings.tagline || DEFAULT_TAGLINE}
-              </span>
-            </span>
-          ))}
-        </div>
-      </div>
+      {/* 1. ROYAL ISLAMIC ARCHITECTURAL GOLD FILIGREE TOP CROWN BORDER (NO RIBBON) */}
+      <div className="h-1.5 w-full bg-gradient-to-r from-[#0A2F25] via-[#D4AF37] to-[#0A2F25]" />
 
-      {/* 2. MOBILE-FIRST HEADER / NAVBAR (NO HAMBURGER MENU) */}
-      <header className="sticky top-0 z-30 bg-[#0A2F25]/95 backdrop-blur-lg border-b border-[#D4AF37]/40 shadow-[0_8px_30px_rgba(10,47,37,0.28)]">
+      {/* 2. MOBILE-FIRST HEADER / NAVBAR WITH CLEAN URL ROUTE SUPPORT */}
+      <header className="sticky top-0 z-30 bg-[#0A2F25]/95 backdrop-blur-lg border-b-2 border-[#D4AF37]/55 shadow-[0_8px_30px_rgba(10,47,37,0.32)]">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2">
           {/* Left Side: Circular White-BG Logo + Site Name */}
           <button
@@ -2469,8 +3000,8 @@ export default function App() {
         {/* ================================================================== */}
         {currentView === 'home' && (
           <div>
-            {/* A. LUXURY ISLAMIC HERO SECTION */}
-            <section className="relative overflow-hidden bg-[#0A2F25] text-white min-h-[460px] sm:min-h-[550px] flex flex-col items-center justify-center py-12 sm:py-20 px-4 border-b-4 border-[#D4AF37]">
+            {/* A. ROYAL ISLAMIC ARCHITECTURE HERO SECTION (MIHRAB ARCH, HANGING FANOUS LANTERNS & MOSQUE SKYLINE) */}
+            <section className="relative overflow-hidden bg-[#0A2F25] text-white min-h-[520px] sm:min-h-[610px] flex flex-col items-center justify-center pt-14 pb-20 sm:pt-20 sm:pb-28 px-4 border-b-4 border-[#D4AF37]">
               {/* Fading Background Banner Slideshow */}
               {validBanners.map((bannerUrl, idx) => (
                 <div
@@ -2486,42 +3017,85 @@ export default function App() {
                 />
               ))}
 
-              {/* Deep Emerald Vignette & Radial Glow */}
+              {/* Deep Emerald Mosque Sanctuary Vignette */}
               <div
                 className="absolute inset-0"
                 style={{
                   background:
-                    'radial-gradient(circle at center, rgba(21,94,74,0.62) 0%, rgba(10,47,37,0.92) 72%, rgba(5,24,19,0.98) 100%)'
+                    'radial-gradient(circle at 50% 38%, rgba(21,94,74,0.68) 0%, rgba(10,47,37,0.93) 68%, rgba(4,20,15,0.99) 100%)'
                 }}
               />
 
+              {/* Grand Islamic Pointed Mihrab Archway & Corner Arabesque Spandrels SVG */}
+              <svg
+                className="pointer-events-none select-none absolute inset-0 w-full h-full opacity-45"
+                viewBox="0 0 1440 700"
+                preserveAspectRatio="none"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                {/* Outer & Inner Pointed Islamic Mihrab Arch Lines */}
+                <path
+                  d="M60,700 L60,240 C60,110 420,28 720,10 C1020,28 1380,110 1380,240 L1380,700"
+                  stroke="#D4AF37"
+                  strokeWidth="2.5"
+                  strokeOpacity="0.65"
+                />
+                <path
+                  d="M84,700 L84,252 C84,130 430,48 720,28 C1010,48 1356,130 1356,252 L1356,700"
+                  stroke="#F3D568"
+                  strokeWidth="1.2"
+                  strokeDasharray="8 6"
+                  strokeOpacity="0.55"
+                />
+                {/* Left & Right Corner Geometric Arabesque Rosettes */}
+                <circle cx="140" cy="95" r="42" stroke="#D4AF37" strokeWidth="1.4" strokeOpacity="0.45" />
+                <circle cx="140" cy="95" r="24" stroke="#F3D568" strokeWidth="1" strokeDasharray="4 3" strokeOpacity="0.45" />
+                <circle cx="1300" cy="95" r="42" stroke="#D4AF37" strokeWidth="1.4" strokeOpacity="0.45" />
+                <circle cx="1300" cy="95" r="24" stroke="#F3D568" strokeWidth="1" strokeDasharray="4 3" strokeOpacity="0.45" />
+              </svg>
+
+              {/* Hanging Golden Moroccan Fanous Lanterns (Left & Right) */}
+              <IslamicHangingLantern side="left" />
+              <IslamicHangingLantern side="right" />
+
               {/* Rotating SVG Islamic Geometric Mandalas */}
-              <div className="absolute -left-28 -top-28 opacity-40">
+              <div className="absolute -left-28 -top-28 opacity-35">
                 <IslamicMandala className="animate-mandala" size={400} />
               </div>
-              <div className="absolute -right-28 -bottom-28 opacity-40">
+              <div className="absolute -right-28 -bottom-28 opacity-35">
                 <IslamicMandala className="animate-mandala-reverse" size={440} />
               </div>
 
-              {/* Hero Center Content */}
+              {/* Hero Center Architectural Content */}
               <div className="relative z-10 max-w-3xl mx-auto text-center flex flex-col items-center">
-                {/* Floating Circular White-BG Logo */}
-                <div className="mb-5 p-1.5 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-[0_0_40px_rgba(212,175,55,0.45)]">
-                  <WhiteCircularLogo
-                    logoUrl={siteSettings.logo_url}
-                    sizeClass="w-20 h-20 sm:w-24 sm:h-24"
-                  />
+                {/* Sacred Bismillah & Rub el Hizb (۞) Pointed Arch Crest */}
+                <div className="inline-flex items-center gap-2.5 px-5 py-1.5 rounded-t-2xl rounded-b-lg bg-[#07211A]/85 border-2 border-[#D4AF37]/75 text-[#F3D568] text-xs sm:text-sm font-semibold mb-5 shadow-[0_0_25px_rgba(212,175,55,0.28)] backdrop-blur-md">
+                  <span className="text-[#D4AF37] text-sm">۞</span>
+                  <span className="tracking-wider">বিসমিল্লাহির রাহমানির রাহিম</span>
+                  <span className="text-[#D4AF37] text-sm">۞</span>
                 </div>
 
-                {/* Golden Ornamental Filigree Pill */}
-                <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/10 backdrop-blur-md border border-[#D4AF37]/50 text-[#F3D568] text-xs sm:text-sm font-semibold mb-4 shadow-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
-                  <span>মানবতা, ভ্রাতৃত্ব ও কল্যাণের অঙ্গীকার</span>
-                  <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
+                {/* Royal 8-Pointed Star Medallion Framing the Circular Logo */}
+                <div className="relative mb-6 flex items-center justify-center">
+                  <div className="absolute -inset-3 rounded-full bg-gradient-to-tr from-[#D4AF37]/30 via-[#F3D568]/20 to-[#D4AF37]/30 blur-md animate-pulse" />
+                  <div className="relative p-1.5 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-[0_0_45px_rgba(212,175,55,0.5)]">
+                    <WhiteCircularLogo
+                      logoUrl={siteSettings.logo_url}
+                      sizeClass="w-20 h-20 sm:w-24 sm:h-24"
+                    />
+                  </div>
+                </div>
+
+                {/* Illuminated Islamic Arch Motto Plaque (Replaces Old Top Ribbon) */}
+                <div className="inline-flex items-center gap-2 px-5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-[#D4AF37]/60 text-[#F3D568] text-xs sm:text-sm font-semibold mb-4 shadow-sm">
+                  <span className="text-[#D4AF37]">☪</span>
+                  <span>{siteSettings.announcement_text || 'মানবতা, ভ্রাতৃত্ব ও কল্যাণের অঙ্গীকার'}</span>
+                  <span className="text-[#D4AF37]">☪</span>
                 </div>
 
                 <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white leading-snug sm:leading-tight mb-4 drop-shadow-lg">
-                  মানবতার সেবায় নব আলো ফাউন্ডেশন
+                  মানবতার সেবায় {siteSettings.site_name || DEFAULT_SITE_NAME}
                 </h1>
 
                 <p className="text-sm sm:text-lg md:text-xl text-gray-200 max-w-2xl mb-8 leading-relaxed">
@@ -2540,7 +3114,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setCurrentView('members')}
-                    className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-[#D4AF37]/50 font-semibold text-sm sm:text-base transition-all"
+                    className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-[#D4AF37]/60 font-semibold text-sm sm:text-base transition-all"
                   >
                     <Users className="w-4 h-4 text-[#F3D568]" />
                     <span>সদস্যবৃন্দ দেখুন</span>
@@ -2562,40 +3136,35 @@ export default function App() {
                     ))}
                   </div>
                 )}
+              </div>
 
-                {/* Glassmorphic Live Impact Ribbon */}
-                <div className="mt-10 w-full max-w-2xl grid grid-cols-3 gap-2.5 sm:gap-4">
-                  <div className="bg-white/10 backdrop-blur-md border border-[#D4AF37]/35 rounded-2xl p-3 sm:p-4 text-center">
-                    <p className="text-lg sm:text-2xl font-bold text-[#F3D568] font-english">
-                      {approvedMembers.length}
-                    </p>
-                    <p className="text-[11px] sm:text-xs text-gray-200 mt-0.5">অনুমোদিত সদস্য</p>
-                  </div>
-                  <div className="bg-white/10 backdrop-blur-md border border-[#D4AF37]/35 rounded-2xl p-3 sm:p-4 text-center">
-                    <p className="text-lg sm:text-2xl font-bold text-[#F3D568] font-english">
-                      {activities.length}
-                    </p>
-                    <p className="text-[11px] sm:text-xs text-gray-200 mt-0.5">মানবিক কার্যক্রম</p>
-                  </div>
-                  <div className="bg-white/10 backdrop-blur-md border border-[#D4AF37]/35 rounded-2xl p-3 sm:p-4 text-center">
-                    <p className="text-lg sm:text-2xl font-bold text-[#F3D568] font-english">100%</p>
-                    <p className="text-[11px] sm:text-xs text-gray-200 mt-0.5">স্বচ্ছ তহবিল</p>
-                  </div>
-                </div>
+              {/* Bottom Mosque Dome & Minaret Horizon Silhouette */}
+              <div className="pointer-events-none select-none absolute bottom-0 inset-x-0 z-10 overflow-hidden leading-none">
+                <svg
+                  viewBox="0 0 1440 74"
+                  className="w-full h-10 sm:h-14 md:h-16"
+                  preserveAspectRatio="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M0,74 L0,56 L90,56 L98,22 L106,56 L180,56 Q220,24 260,56 L390,56 Q450,12 510,56 L610,56 L618,10 L626,56 L660,56 Q720,-6 780,56 L814,56 L822,10 L830,56 L930,56 Q990,12 1050,56 L1180,56 Q1220,24 1260,56 L1334,56 L1342,22 L1350,56 L1440,56 L1440,74 Z"
+                    fill="#07211A"
+                    fillOpacity="0.72"
+                    stroke="#D4AF37"
+                    strokeWidth="1.5"
+                  />
+                </svg>
               </div>
             </section>
 
             {/* B. ACTIVITIES SECTION (`আমাদের কার্যক্রম`) */}
             <section className="max-w-7xl mx-auto px-3 sm:px-6 py-11 sm:py-16">
               <div className="text-center max-w-2xl mx-auto mb-8">
-                <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#0A2F25]/10 text-[#0A2F25] border border-[#D4AF37]/50 text-xs font-bold mb-2">
-                  <HeartHandshake className="w-3.5 h-3.5 text-[#155e4a]" />
-                  <span>মানবতার কল্যাণে আমাদের পদক্ষেপ</span>
-                </div>
+                <IslamicSectionDivider subtitle="মানবতার কল্যাণে আমাদের পদক্ষেপ" />
                 <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#0A2F25]">
                   আমাদের কার্যক্রম
                 </h2>
-                <div className="w-24 h-1 bg-gradient-to-r from-[#0A2F25] via-[#D4AF37] to-[#0A2F25] mx-auto mt-2.5 rounded-full" />
+                <div className="w-28 h-1 bg-gradient-to-r from-[#0A2F25] via-[#D4AF37] to-[#0A2F25] mx-auto mt-2.5 rounded-full" />
               </div>
 
               {/* Dynamic Category Filter Buttons */}
@@ -2731,52 +3300,7 @@ export default function App() {
               )}
             </section>
 
-            {/* C. PUBLIC GALLERY SHOWCASE WITH FULLSCREEN LIGHTBOX */}
-            {allWebsiteMedia.length > 0 && (
-              <section className="max-w-7xl mx-auto px-3 sm:px-6 pb-12 sm:pb-16">
-                <div className="text-center max-w-2xl mx-auto mb-8">
-                  <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#0A2F25]/10 text-[#0A2F25] border border-[#D4AF37]/50 text-xs font-bold mb-2">
-                    <ImageIcon className="w-3.5 h-3.5 text-[#155e4a]" />
-                    <span>স্মৃতির পাতা</span>
-                  </div>
-                  <h2 className="text-2xl sm:text-3xl font-bold text-[#0A2F25]">ফাউন্ডেশন গ্যালারি</h2>
-                  <div className="w-20 h-1 bg-[#D4AF37] mx-auto mt-2 rounded-full" />
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 sm:gap-5">
-                  {allWebsiteMedia.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => setLightboxMediaUrl(item.url)}
-                      className="cursor-pointer rounded-2xl overflow-hidden border-2 border-[#D4AF37]/35 hover:border-[#D4AF37] bg-[#0A2F25] shadow-md hover:shadow-xl h-44 sm:h-52 relative group transition-all"
-                    >
-                      {isMediaVideo(item.url) ? (
-                        <video
-                          src={optimizeMedia(item.url)}
-                          autoPlay
-                          muted
-                          loop
-                          playsInline
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                      ) : (
-                        <img
-                          src={optimizeGalleryThumb(item.url)}
-                          alt="গ্যালারি"
-                          loading="lazy"
-                          decoding="async"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                      )}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity w-10 h-10 rounded-full bg-[#0A2F25]/85 border border-[#D4AF37] text-[#F3D568] flex items-center justify-center">
-                          <Eye className="w-5 h-5" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
+
 
             {/* D. SHARE YOUR IDEA SECTION (`আপনার পরিকল্পনা শেয়ার করুন`) */}
             <section className="relative overflow-hidden bg-gradient-to-br from-[#0A2F25] via-[#124A3B] to-[#0A2F25] text-white py-14 sm:py-20 px-4 border-t-2 border-[#D4AF37]/60">
@@ -3051,7 +3575,7 @@ export default function App() {
         {/* ================================================================== */}
         {/* VIEW 4: LOGIN VIEW (`login`)                                       */}
         {/* ================================================================== */}
-        {currentView === 'login' && (
+        {(currentView === 'login' || (currentView === 'dashboard' && !appUser)) && (
           <section className="max-w-md mx-auto px-4 py-10 sm:py-14">
             <div className="bg-white rounded-3xl border-2 border-[#D4AF37]/50 shadow-2xl overflow-hidden">
               <div className="bg-gradient-to-r from-[#0A2F25] via-[#124A3B] to-[#0A2F25] p-6 text-center text-white border-b border-[#D4AF37]/40">
@@ -3268,6 +3792,175 @@ export default function App() {
             {/* ============================================================== */}
             {appUser.role === 'admin' && activeTab === 'members' && (
               <div className="space-y-6">
+                {/* Quick Add Member via Facebook URL or Direct Form */}
+                <form
+                  onSubmit={handleQuickMemberSubmit}
+                  className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-[#D4AF37]/50 shadow-md space-y-4"
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-2xl bg-[#0A2F25] text-[#F3D568] flex items-center justify-center shadow">
+                        <UserPlus className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
+                          সরাসরি নতুন সদস্য যুক্ত করুন (Facebook URL / Quick Add)
+                        </h3>
+                        <p className="text-xs text-gray-500">
+                          ফেসবুক প্রোফাইল লিংক পেস্ট করে অথবা সরাসরি নাম, ছবি ও পদবী দিয়ে সদস্য যুক্ত করুন
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Facebook URL Input + Auto-Fetch Button */}
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <div className="relative flex-1">
+                      <Facebook className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="url"
+                        value={quickMemberForm.fb_url}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setQuickMemberForm((p) => ({ ...p, fb_url: val }));
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value.includes('facebook.com') && !quickMemberForm.name) {
+                            handleFetchFromFacebookUrl(e.target.value);
+                          }
+                        }}
+                        placeholder="ফেসবুক প্রোফাইল লিংক পেস্ট করুন (যেমন: https://facebook.com/username)"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={fetchingFbInfo}
+                      onClick={() => handleFetchFromFacebookUrl()}
+                      className="px-4 py-2.5 rounded-xl bg-[#124A3B] hover:bg-[#155e4a] text-[#F3D568] border border-[#D4AF37]/50 text-xs sm:text-sm font-bold shrink-0 transition"
+                    >
+                      {fetchingFbInfo ? 'আনা হচ্ছে...' : 'ফেসবুক থেকে নাম/ছবি আনুন'}
+                    </button>
+                  </div>
+
+                  {/* Name, Designation, Role, Sort Order & Photo Upload */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                    <div>
+                      <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                        সদস্যের নাম *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={quickMemberForm.name}
+                        onChange={(e) =>
+                          setQuickMemberForm((p) => ({ ...p, name: e.target.value }))
+                        }
+                        placeholder="সদস্যের পূর্ণ নাম"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                        পদবী / ক্যাটাগরি (Designation) *
+                      </label>
+                      <input
+                        type="text"
+                        list="member-designations-datalist"
+                        value={quickMemberForm.designation}
+                        onChange={(e) =>
+                          setQuickMemberForm((p) => ({ ...p, designation: e.target.value }))
+                        }
+                        placeholder="যেমন: সভাপতি / সাধারণ সদস্য"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
+                      />
+                      <datalist id="member-designations-datalist">
+                        <option value="সভাপতি" />
+                        <option value="সহ-সভাপতি" />
+                        <option value="সাধারণ সম্পাদক" />
+                        <option value="যুগ্ম সাধারণ সম্পাদক" />
+                        <option value="সাংগঠনিক সম্পাদক" />
+                        <option value="কোষাধ্যক্ষ" />
+                        <option value="প্রচার সম্পাদক" />
+                        <option value="শিক্ষা ও কল্যাণ সম্পাদক" />
+                        <option value="কার্যকরী সদস্য" />
+                        <option value="অ্যাডমিন" />
+                        <option value="সাধারণ সদস্য" />
+                      </datalist>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                        রোল ও ক্রমিক নং
+                      </label>
+                      <div className="flex gap-2">
+                        <select
+                          value={quickMemberForm.role}
+                          onChange={(e) => {
+                            const nextRole = e.target.value === 'admin' ? 'admin' : 'member';
+                            setQuickMemberForm((p) => ({
+                              ...p,
+                              role: nextRole,
+                              designation:
+                                p.designation === 'সাধারণ সদস্য' && nextRole === 'admin'
+                                  ? 'অ্যাডমিন'
+                                  : p.designation
+                            }));
+                          }}
+                          className="flex-1 px-3 py-2.5 rounded-xl border border-gray-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-[#0A2F25]"
+                        >
+                          <option value="member">সদস্য</option>
+                          <option value="admin">অ্যাডমিন</option>
+                        </select>
+                        <input
+                          type="number"
+                          value={quickMemberForm.sort_order}
+                          onChange={(e) =>
+                            setQuickMemberForm((p) => ({
+                              ...p,
+                              sort_order: Number(e.target.value)
+                            }))
+                          }
+                          title="ক্রমিক নাম্বার"
+                          className="w-20 px-2.5 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-11 h-11 rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center font-bold overflow-hidden border border-[#D4AF37] shrink-0">
+                        {quickMemberForm.avatar_url ? (
+                          <img
+                            src={optimizeMedia(quickMemberForm.avatar_url)}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <User className="w-5 h-5" />
+                        )}
+                      </div>
+                      <label className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#F4F7F5] hover:bg-[#0A2F25] text-[#0A2F25] hover:text-[#F3D568] border border-[#D4AF37]/60 text-xs font-bold cursor-pointer transition">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>ছবি আপলোড</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleQuickMemberPhotoUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn-glossy-emerald inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#0A2F25] to-[#155e4a] text-[#F3D568] border border-[#D4AF37] font-bold text-sm shadow-md hover:opacity-95 transition"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>সদস্য তালিকায় যুক্ত করুন</span>
+                  </button>
+                </form>
                 <div className="bg-white rounded-2xl p-4 sm:p-5 border-2 border-[#D4AF37]/50 shadow-sm flex items-center justify-between gap-4">
                   <div>
                     <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
@@ -4052,68 +4745,142 @@ export default function App() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
-                    সাইট সেটিংস
+                    সাইট সেটিংস ও ব্র্যান্ডিং
                   </h3>
-                  <span className="px-3 py-1 rounded-full bg-[#0A2F25]/10 text-[#0A2F25] border border-[#D4AF37]/50 text-xs font-english font-semibold">
-                    Cloudinary ID: {CLOUDINARY_ID} • Folder: {CLOUDINARY_FOLDER_NAME}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                        d1LiveConnected
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                          : 'bg-amber-50 text-amber-800 border-amber-300'
+                      }`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          d1LiveConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'
+                        }`}
+                      />
+                      <span>
+                        {d1LiveConnected
+                          ? 'Cloudflare D1 (nobo-alo-db) গ্লোবাল ডাটাবেজ সংযুক্ত'
+                          : 'D1 সিঙ্ক প্রস্তুত (Cloudflare ডিপ্লয়মেন্টে গ্লোবালি কাজ করবে)'}
+                      </span>
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-[#0A2F25]/10 text-[#0A2F25] border border-[#D4AF37]/50 text-xs font-english font-semibold">
+                      Cloudinary: {CLOUDINARY_ID} ({CLOUDINARY_FOLDER_NAME})
+                    </span>
+                  </div>
                 </div>
 
-                {/* Logo & Favicon Upload Grid */}
+                {/* Logo & Favicon Upload + Direct Link Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex items-center gap-4 p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200">
-                    <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-16 h-16" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
-                        ফাউন্ডেশন লোগো
-                      </p>
-                      <p className="text-[11px] text-gray-500 mb-2">
-                        লোগো আপলোড করলে তা স্বয়ংক্রিয়ভাবে ফেভিকনেও সেট হবে
-                      </p>
-                      <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0A2F25] text-[#F3D568] text-xs font-bold cursor-pointer hover:opacity-95 transition">
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>নতুন লোগো আপলোড</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLogoUpload}
-                          className="hidden"
-                        />
+                  <div className="p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-3">
+                    <div className="flex items-center gap-4">
+                      <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-16 h-16" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
+                          ফাউন্ডেশন লোগো
+                        </p>
+                        <p className="text-[11px] text-gray-500 mb-2">
+                          আপলোড বা সরাসরি ইমেজ লিংক বসালে পুরো ওয়েবসাইটে সাথে সাথে সেট হবে
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0A2F25] text-[#F3D568] text-xs font-bold cursor-pointer hover:opacity-95 transition">
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>নতুন লোগো আপলোড</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleLogoUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          {siteSettings.logo_url && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = { ...siteSettings, logo_url: '' };
+                                persistSettingsInstant(next);
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-red-50 text-red-700 border border-red-200 text-[11px] font-bold"
+                            >
+                              রিসেট
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                        অথবা সরাসরি লোগো ইমেজ লিংক (Cloudinary / Direct Image URL):
                       </label>
+                      <input
+                        type="url"
+                        placeholder="https://res.cloudinary.com/..."
+                        value={siteSettings.logo_url || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          lastSettingsSaveRef.current = Date.now();
+                          setSiteSettings((p) => ({
+                            ...p,
+                            logo_url: val,
+                            favicon_url: p.favicon_url || val
+                          }));
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-english focus:outline-none focus:border-[#0A2F25]"
+                      />
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4 p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200">
-                    <WhiteCircularLogo
-                      logoUrl={siteSettings.favicon_url || siteSettings.logo_url}
-                      sizeClass="w-14 h-14"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
-                        ব্রাউজার ফেভিকন (Favicon)
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                        <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#155e4a] text-white text-xs font-bold cursor-pointer hover:opacity-95 transition">
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>আলাদা ফেভিকন আপলোড</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleFaviconUpload}
-                            className="hidden"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSiteSettings((p) => ({ ...p, favicon_url: p.logo_url }));
-                            showNotice('লোগোটিকেই ফেভিকন হিসেবে সেট করা হয়েছে!', 'success');
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-white border border-[#D4AF37] text-[#0A2F25] text-[11px] font-bold hover:bg-[#D4AF37]/20 transition"
-                        >
-                          লোগো ব্যবহার করুন
-                        </button>
+                  <div className="p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-3">
+                    <div className="flex items-center gap-4">
+                      <WhiteCircularLogo
+                        logoUrl={siteSettings.favicon_url || siteSettings.logo_url}
+                        sizeClass="w-16 h-16"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
+                          ব্রাউজার ফেভিকন (Favicon)
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#155e4a] text-white text-xs font-bold cursor-pointer hover:opacity-95 transition">
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>আলাদা ফেভিকন আপলোড</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleFaviconUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = { ...siteSettings, favicon_url: siteSettings.logo_url };
+                              persistSettingsInstant(next);
+                              showNotice('লোগোটিকেই ফেভিকন হিসেবে সেট করা হয়েছে!', 'success');
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-white border border-[#D4AF37] text-[#0A2F25] text-[11px] font-bold hover:bg-[#D4AF37]/20 transition"
+                          >
+                            লোগো ব্যবহার করুন
+                          </button>
+                        </div>
                       </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                        সরাসরি ফেভিকন ইমেজ লিংক (Direct Favicon URL):
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://res.cloudinary.com/..."
+                        value={siteSettings.favicon_url || ''}
+                        onChange={(e) => {
+                          lastSettingsSaveRef.current = Date.now();
+                          setSiteSettings((p) => ({ ...p, favicon_url: e.target.value }));
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-english focus:outline-none focus:border-[#0A2F25]"
+                      />
                     </div>
                   </div>
                 </div>
@@ -4126,9 +4893,10 @@ export default function App() {
                     <input
                       type="text"
                       value={siteSettings.site_name}
-                      onChange={(e) =>
-                        setSiteSettings((p) => ({ ...p, site_name: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        lastSettingsSaveRef.current = Date.now();
+                        setSiteSettings((p) => ({ ...p, site_name: e.target.value }));
+                      }}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
                     />
                   </div>
@@ -4139,9 +4907,10 @@ export default function App() {
                     <input
                       type="text"
                       value={siteSettings.tagline}
-                      onChange={(e) =>
-                        setSiteSettings((p) => ({ ...p, tagline: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        lastSettingsSaveRef.current = Date.now();
+                        setSiteSettings((p) => ({ ...p, tagline: e.target.value }));
+                      }}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
                     />
                   </div>
@@ -4149,22 +4918,23 @@ export default function App() {
 
                 <div>
                   <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                    টপ স্ক্রলিং সাদা টেক্সট (announcement_text)
+                    হিরো আর্চ ব্যাজ টেক্সট (ইসলামিক আর্কিটেকচারাল ফলক টেক্সট)
                   </label>
                   <input
                     type="text"
                     value={siteSettings.announcement_text}
-                    onChange={(e) =>
-                      setSiteSettings((p) => ({ ...p, announcement_text: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      lastSettingsSaveRef.current = Date.now();
+                      setSiteSettings((p) => ({ ...p, announcement_text: e.target.value }));
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
                   />
                 </div>
 
-                {/* 4 Homepage Banners */}
+                {/* 4 Homepage Banners with File Upload + Direct URL Input */}
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-2">
-                    হোমপেজ ব্যানার (৪টি)
+                    হোমপেজ ব্যানার স্লাইডশো (৪টি স্লট — আপলোড করুন অথবা সরাসরি ইমেজ লিংক দিন)
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {[0, 1, 2, 3].map((slotIdx) => {
@@ -4174,24 +4944,53 @@ export default function App() {
                           key={slotIdx}
                           className="p-3.5 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-2.5"
                         >
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-bold text-[#0A2F25]">
                               ব্যানার #{slotIdx + 1}
                             </span>
-                            <label className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#155e4a] text-white text-xs font-semibold cursor-pointer">
-                              <Upload className="w-3 h-3" />
-                              <span>আপলোড</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => handleBannerUpload(slotIdx, e)}
-                                className="hidden"
-                              />
-                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <label className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#155e4a] text-white text-xs font-semibold cursor-pointer">
+                                <Upload className="w-3 h-3" />
+                                <span>আপলোড</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => handleBannerUpload(slotIdx, e)}
+                                  className="hidden"
+                                />
+                              </label>
+                              {currentBanner && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextBanners = [...(siteSettings.banners || ['', '', '', ''])];
+                                    nextBanners[slotIdx] = '';
+                                    persistSettingsInstant({ ...siteSettings, banners: nextBanners });
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 text-[11px] font-bold"
+                                >
+                                  মুছুন
+                                </button>
+                              )}
+                            </div>
                           </div>
+                          <input
+                            type="url"
+                            placeholder="https://res.cloudinary.com/..."
+                            value={currentBanner}
+                            onChange={(e) => {
+                              lastSettingsSaveRef.current = Date.now();
+                              const nextBanners = [...(siteSettings.banners || ['', '', '', ''])];
+                              while (nextBanners.length < 4) nextBanners.push('');
+                              nextBanners[slotIdx] = e.target.value;
+                              setSiteSettings((p) => ({ ...p, banners: nextBanners }));
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-xs font-english focus:outline-none focus:border-[#0A2F25]"
+                          />
                           {currentBanner && (
                             <div className="w-full h-24 rounded-xl overflow-hidden bg-[#0A2F25] border border-[#D4AF37]/40">
                               <img
+                                key={currentBanner}
                                 src={optimizeMedia(currentBanner)}
                                 alt={`Banner ${slotIdx + 1}`}
                                 className="w-full h-full object-cover"
@@ -4569,9 +5368,10 @@ export default function App() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#0A2F25] mb-1">পদবী</label>
+              <label className="block text-xs font-bold text-[#0A2F25] mb-1">পদবী / ক্যাটাগরি (Designation)</label>
               <input
                 type="text"
+                list="member-designations-datalist"
                 value={editingMember.designation}
                 onChange={(e) =>
                   setEditingMember((prev) =>

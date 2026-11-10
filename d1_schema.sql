@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS site_settings (
   site_name TEXT DEFAULT 'নব আলো ফাউন্ডেশন',
   tagline TEXT DEFAULT 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।',
   announcement_text TEXT DEFAULT 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।',
-  logo_url TEXT DEFAULT 'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/1772377523792_Nobo%20Alo%20Logo-03.png',
-  favicon_url TEXT DEFAULT 'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/Website%20favicon-03.png',
+  logo_url TEXT DEFAULT '',
+  favicon_url TEXT DEFAULT '',
   banners TEXT DEFAULT '["","","",""]',
   auto_approve INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -22,8 +22,8 @@ VALUES (
   'নব আলো ফাউন্ডেশন',
   'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।',
   'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।',
-  'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/1772377523792_Nobo%20Alo%20Logo-03.png',
-  'https://xlcepfrjngtzrmpazkla.supabase.co/storage/v1/object/public/foundation-images/Website%20favicon-03.png',
+  '',
+  '',
   '["","","",""]',
   0
 );
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS users (
   designation TEXT DEFAULT 'সাধারণ সদস্য',
   sort_order INTEGER DEFAULT 100,
   promoted_by TEXT DEFAULT '',
+  fb_url TEXT DEFAULT '',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
