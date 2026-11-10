@@ -165,6 +165,121 @@ const checkIsComingSoon = (is_coming_soon?: boolean, activity_date?: string | nu
 // ============================================================================
 // 3. INTERFACES & PRODUCTION STATE TYPES
 // ============================================================================
+const DEFAULT_DESIGNATIONS: string[] = ["সভাপতি", "সহ-সভাপতি", "সাধারণ সম্পাদক", "যুগ্ম সাধারণ সম্পাদক", "সাংগঠনিক সম্পাদক", "সহ-সাংগঠনিক সম্পাদক", "অর্থ সম্পাদক", "সহ-অর্থ সম্পাদক", "প্রচার ও প্রকাশনা সম্পাদক", "দপ্তর সম্পাদক", "সমাজকল্যাণ ও ত্রাণ সম্পাদক", "শিক্ষা ও সাংস্কৃতিক সম্পাদক", "ধর্ম বিষয়ক সম্পাদক", "তথ্য ও প্রযুক্তি সম্পাদক", "কার্যনির্বাহী সদস্য", "উপদেষ্টা", "প্রতিষ্ঠাতা সদস্য", "আজীবন সদস্য", "অ্যাডমিন", "সদস্য", "সাধারণ সদস্য"];
+
+// Bangladeshi Mobile Number Normalizer & Validator (013..019, 11 digits)
+const bnToEnDigits = (str: string): string => {
+  const map: Record<string, string> = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+  };
+  return String(str || '').replace(/[০-৯]/g, (d) => map[d] || d);
+};
+
+const analyzeBdPhone = (raw: string): {
+  cleaned: string;
+  normalized: string;
+  isValidBd: boolean;
+  looksLikePhone: boolean;
+  operator: string;
+} => {
+  const ascii = bnToEnDigits(raw).replace(/[\s\-().]/g, '');
+  const looksLikePhone = /^[+0-9০-৯]+$/.test(ascii) && ascii.length >= 3 && !ascii.includes('@');
+  const match = ascii.match(/^(?:\+?88)?(01[3-9]\d{8})$/);
+  if (!match) {
+    return { cleaned: ascii, normalized: ascii, isValidBd: false, looksLikePhone, operator: '' };
+  }
+  const norm = match[1];
+  const prefix = norm.slice(0, 3);
+  const opMap: Record<string, string> = {
+    '017': 'Grameenphone',
+    '013': 'Grameenphone',
+    '018': 'Robi',
+    '016': 'Airtel',
+    '019': 'Banglalink',
+    '014': 'Banglalink',
+    '015': 'Teletalk'
+  };
+  return {
+    cleaned: ascii,
+    normalized: norm,
+    isValidBd: true,
+    looksLikePhone: true,
+    operator: opMap[prefix] || 'BD Operator'
+  };
+};
+
+// Client-Side Automatic Image Compressor (Resizes & Compresses before Cloudinary Upload)
+const compressImageFile = (
+  file: File,
+  mode: 'avatar' | 'logo' | 'general' = 'general'
+): Promise<File> => {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/') || file.type === 'image/svg+xml' || file.type === 'image/gif') {
+      resolve(file);
+      return;
+    }
+    const maxDim = mode === 'avatar' ? 480 : mode === 'logo' ? 512 : 1600;
+    const quality = mode === 'avatar' ? 0.82 : 0.86;
+
+    // If general image is already small (< 350 KB) and not avatar, skip re-encoding
+    if (mode === 'general' && file.size < 350 * 1024) {
+      resolve(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        if (mode === 'avatar') {
+          // Square center-crop or proportional fit within 480x480
+          const scale = Math.min(1, maxDim / Math.max(w, h));
+          w = Math.max(1, Math.round(w * scale));
+          h = Math.max(1, Math.round(h * scale));
+        } else if (w > maxDim || h > maxDim) {
+          const scale = maxDim / Math.max(w, h);
+          w = Math.max(1, Math.round(w * scale));
+          h = Math.max(1, Math.round(h * scale));
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        const outType = mode === 'logo' || file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve(file);
+              return;
+            }
+            const ext = outType === 'image/png' ? '.png' : '.jpg';
+            const cleanBase = file.name.replace(/\.[^.]+$/, '') || 'image';
+            const compressedFile = new File([blob], `${cleanBase}${ext}`, {
+              type: outType,
+              lastModified: Date.now()
+            });
+            resolve(compressedFile);
+          },
+          outType,
+          quality
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = String(ev.target?.result || '');
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+};
+
 interface SiteSettings {
   id?: number;
   site_name: string;
@@ -173,6 +288,7 @@ interface SiteSettings {
   logo_url: string;
   favicon_url?: string;
   banners: string[];
+  designations?: string[];
   auto_approve: boolean;
 }
 
@@ -234,6 +350,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   logo_url: DEFAULT_LOGO_URL,
   favicon_url: FAVICON_URL,
   banners: ['', '', '', ''],
+  designations: DEFAULT_DESIGNATIONS,
   auto_approve: false
 };
 
@@ -403,10 +520,16 @@ const runLocalD1Fallback = (endpoint: string, method: string, body?: any) => {
   }
 
   if ((pathPart === 'login' || pathPart === 'auth/login') && method === 'POST') {
-    const email = String(body?.email || '').trim().toLowerCase();
+    const rawId = String(body?.identifier || body?.email || '').trim();
+    const email = rawId.toLowerCase();
+    const phoneCheck = analyzeBdPhone(rawId);
     const password = String(body?.password || '').trim();
     const isSuper = email === SUPER_ADMIN_EMAIL.toLowerCase();
-    let user = store.members.find((m: any) => String(m.email || '').toLowerCase() === email);
+    let user = store.members.find(
+      (m: any) =>
+        String(m.email || '').toLowerCase() === email ||
+        (phoneCheck.normalized && analyzeBdPhone(String(m.mobile || '')).normalized === phoneCheck.normalized)
+    );
     if (!user && isSuper) {
       user = {
         id: 'super-admin-raihan',
@@ -615,9 +738,11 @@ const singleXhrUpload = (
 // Automatically resolves whether `wz8yg950` is set as Cloud Name or Upload Preset Name,
 // and saves directly inside the `nobo_alo_images` folder.
 const uploadMediaToCloudinary = async (
-  file: File,
-  onProgress: (percent: number) => void
+  rawFile: File,
+  onProgress: (percent: number) => void,
+  mode: 'avatar' | 'logo' | 'general' = 'general'
 ): Promise<string> => {
+  const file = await compressImageFile(rawFile, mode);
   const attempts = [
     { cloud: CLOUDINARY_FALLBACK_CLOUD, preset: CLOUDINARY_UPLOAD_PRESET, folder: CLOUDINARY_FOLDER_NAME },
     { cloud: CLOUDINARY_FALLBACK_CLOUD, preset: CLOUDINARY_FOLDER_NAME, folder: CLOUDINARY_FOLDER_NAME },
@@ -1545,8 +1670,19 @@ export default function App() {
     for (const bUrl of siteSettings.banners || []) {
       pushUrl(bUrl, 'banner');
     }
+    if (siteSettings.logo_url) {
+      pushUrl(siteSettings.logo_url, 'logo');
+    }
+    if (siteSettings.favicon_url && siteSettings.favicon_url !== siteSettings.logo_url) {
+      pushUrl(siteSettings.favicon_url, 'favicon');
+    }
+    for (const mem of members) {
+      if (mem.avatar_url && !mem.avatar_url.includes('unavatar.io')) {
+        pushUrl(mem.avatar_url, `mem-${mem.id}`, mem.created_at);
+      }
+    }
     return combined;
-  }, [gallery, activities, siteSettings.banners]);
+  }, [gallery, activities, siteSettings.banners, siteSettings.logo_url, siteSettings.favicon_url, members]);
 
   const approvedMembers = useMemo(
     () =>
@@ -1637,15 +1773,40 @@ export default function App() {
     name: '',
     email: '',
     mobile: '',
+    fb_url: '',
     password: ''
   });
+  const [showJoinPassword, setShowJoinPassword] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [headerProfileMenuOpen, setHeaderProfileMenuOpen] = useState(false);
+  const [showSettingsLinkBox, setShowSettingsLinkBox] = useState<Record<string, boolean>>({});
+  const [newDesignationInput, setNewDesignationInput] = useState('');
+  const [editingDesignationIdx, setEditingDesignationIdx] = useState<number | null>(null);
+  const [editingDesignationText, setEditingDesignationText] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+
+  const activeDesignations = useMemo(() => {
+    const list = siteSettings.designations && siteSettings.designations.length > 0
+      ? siteSettings.designations
+      : DEFAULT_DESIGNATIONS;
+    return Array.from(new Set(list));
+  }, [siteSettings.designations]);
 
   const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = joinForm.email.trim().toLowerCase();
+    const bdCheck = analyzeBdPhone(joinForm.mobile);
+
     if (!joinForm.name.trim() || !cleanEmail || !joinForm.mobile.trim()) {
-      showNotice('সবগুলো তথ্য সঠিকভাবে পূরণ করুন।', 'error');
+      showNotice('নাম, ইমেইল এবং বাংলাদেশি মোবাইল নাম্বার আবশ্যক।', 'error');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      showNotice('সঠিক ইমেইল অ্যাড্রেস প্রদান করুন।', 'error');
+      return;
+    }
+    if (!bdCheck.isValidBd) {
+      showNotice('সঠিক ১১ ডিজিটের বাংলাদেশি মোবাইল নাম্বার দিন (যেমন: 017XXXXXXXX)।', 'error');
       return;
     }
     if (joinForm.password.length < 6) {
@@ -1664,7 +1825,8 @@ export default function App() {
       const regRes = await callD1Api('auth/register', 'POST', {
         name: joinForm.name.trim(),
         email: cleanEmail,
-        mobile: joinForm.mobile.trim(),
+        mobile: bdCheck.normalized,
+        fb_url: joinForm.fb_url.trim(),
         password: joinForm.password
       });
       setAuthLoading(false);
@@ -1674,7 +1836,7 @@ export default function App() {
       }
       const createdUser = normalizeMemberRow(regRes.data.user);
       setMembers((prev) => [...prev.filter((m) => m.email.toLowerCase() !== cleanEmail), createdUser]);
-      setJoinForm({ name: '', email: '', mobile: '', password: '' });
+      setJoinForm({ name: '', email: '', mobile: '', fb_url: '', password: '' });
       if (createdUser.status === 'approved') {
         setAppUser(createdUser);
         showNotice('অভিনন্দন! আপনার একাউন্টটি অনুমোদিত হয়েছে।', 'success');
@@ -1755,18 +1917,26 @@ export default function App() {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanEmail = loginForm.email.trim().toLowerCase();
-    if (!cleanEmail || !loginForm.password) {
-      showNotice('ইমেইল এবং পাসওয়ার্ড প্রদান করুন।', 'error');
+    const rawIdentifier = loginForm.email.trim();
+    if (!rawIdentifier || !loginForm.password) {
+      showNotice('ইমেইল অথবা মোবাইল নাম্বার এবং পাসওয়ার্ড প্রদান করুন।', 'error');
       return;
     }
 
+    const bdCheck = analyzeBdPhone(rawIdentifier);
+    if (bdCheck.looksLikePhone && !bdCheck.isValidBd) {
+      showNotice('সঠিক ১১ ডিজিটের বাংলাদেশি মোবাইল নাম্বার দিন (যেমন: 017XXXXXXXX)।', 'error');
+      return;
+    }
+
+    const cleanIdentifier = bdCheck.isValidBd ? bdCheck.normalized : rawIdentifier.toLowerCase();
     setAuthLoading(true);
-    const isSuperAdmin = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
+    const isSuperAdmin = cleanIdentifier === SUPER_ADMIN_EMAIL.toLowerCase();
 
     if (useD1Backend) {
       const logRes = await callD1Api('auth/login', 'POST', {
-        email: cleanEmail,
+        identifier: cleanIdentifier,
+        email: cleanIdentifier,
         password: loginForm.password
       });
       setAuthLoading(false);
@@ -2100,6 +2270,88 @@ export default function App() {
     }
   };
 
+  // Admin Designation Change Handler (Any Admin can change any Member's or Admin's designation)
+  const handleDesignationChange = async (member: MemberUser, nextDesignation: string) => {
+    if (!appUser || appUser.role !== 'admin') return;
+    const cleanDesig = nextDesignation.trim() || 'সাধারণ সদস্য';
+    setMembers((prev) =>
+      prev.map((m) => (m.id === member.id ? { ...m, designation: cleanDesig } : m))
+    );
+    if (appUser.id === member.id) {
+      setAppUser((prev) => (prev ? { ...prev, designation: cleanDesig } : null));
+    }
+    showNotice(`${member.name}-এর পদবি "${cleanDesig}" হিসেবে আপডেট করা হয়েছে!`, 'success');
+    await callD1Api('members', 'PUT', {
+      id: member.id,
+      email: member.email,
+      designation: cleanDesig
+    });
+  };
+
+  // Designation CRUD Handlers (Add / Edit / Delete Designations in siteSettings.designations)
+  const handleAddDesignation = async () => {
+    const clean = newDesignationInput.trim();
+    if (!clean) {
+      showNotice('পদবির নাম লিখুন।', 'error');
+      return;
+    }
+    if (activeDesignations.includes(clean)) {
+      showNotice('এই পদবিটি ইতিমধ্যে তালিকায় রয়েছে।', 'error');
+      return;
+    }
+    const nextList = [...activeDesignations, clean];
+    setNewDesignationInput('');
+    await persistSettingsInstant({ ...siteSettings, designations: nextList });
+    showNotice(`"${clean}" নতুন পদবি হিসেবে যুক্ত হয়েছে!`, 'success');
+  };
+
+  const handleSaveEditedDesignation = async (idx: number) => {
+    const oldVal = activeDesignations[idx];
+    const clean = editingDesignationText.trim();
+    if (!clean) return;
+    const nextList = activeDesignations.map((d, i) => (i === idx ? clean : d));
+    setEditingDesignationIdx(null);
+    setEditingDesignationText('');
+    await persistSettingsInstant({ ...siteSettings, designations: nextList });
+
+    // Also update any members currently holding the old designation
+    if (oldVal && oldVal !== clean) {
+      const affected = members.filter((m) => m.designation === oldVal);
+      if (affected.length > 0) {
+        setMembers((prev) =>
+          prev.map((m) => (m.designation === oldVal ? { ...m, designation: clean } : m))
+        );
+        for (const m of affected) {
+          await callD1Api('members', 'PUT', { id: m.id, designation: clean });
+        }
+      }
+    }
+    showNotice(`পদবি "${clean}" সফলভাবে আপডেট হয়েছে!`, 'success');
+  };
+
+  const handleDeleteDesignation = async (desigToRemove: string) => {
+    if (activeDesignations.length <= 1) {
+      showNotice('কমপক্ষে একটি পদবি থাকতে হবে।', 'error');
+      return;
+    }
+    const nextList = activeDesignations.filter((d) => d !== desigToRemove);
+    await persistSettingsInstant({ ...siteSettings, designations: nextList });
+    showNotice(`"${desigToRemove}" পদবিটি তালিকা থেকে মুছে ফেলা হয়েছে।`, 'success');
+  };
+
+  const extractFbUsername = (rawUrl: string): string => {
+    try {
+      const u = new URL(rawUrl.trim());
+      const seg = u.pathname.split('/').filter(Boolean)[0] || '';
+      if (seg && !['profile.php', 'people', 'share', 'login', 'watch', 'groups'].includes(seg.toLowerCase())) {
+        return seg;
+      }
+      return u.searchParams.get('id') || '';
+    } catch {
+      return '';
+    }
+  };
+
   const handleFetchFromFacebookUrl = async (inputUrl?: string) => {
     const targetUrl = (inputUrl ?? quickMemberForm.fb_url).trim();
     if (!targetUrl) {
@@ -2108,6 +2360,31 @@ export default function App() {
     }
     setFetchingFbInfo(true);
     try {
+      // 1. Try Cloudflare Edge Server-Side OpenGraph Resolver (/api/fb-profile)
+      const edgeRes = await callD1Api(`fb-profile?url=${encodeURIComponent(targetUrl)}`, 'GET');
+      if (edgeRes.ok && edgeRes.data?.ok && (edgeRes.data.name || edgeRes.data.avatar_url)) {
+        const fetchedName = edgeRes.data.name || extractFbNameFromUrl(edgeRes.data.resolved_url || targetUrl);
+        const fetchedAvatar = edgeRes.data.avatar_url || edgeRes.data.dynamic_avatar_url || '';
+        setQuickMemberForm((prev) => ({
+          ...prev,
+          fb_url: targetUrl,
+          name: fetchedName || prev.name,
+          avatar_url: fetchedAvatar || prev.avatar_url
+        }));
+        showNotice(
+          fetchedName
+            ? `ফেসবুক থেকে "${fetchedName}"-এর তথ্য সংযুক্ত হয়েছে!`
+            : 'ফেসবুক প্রোফাইল লিংক ও ছবি সংযুক্ত হয়েছে! এবার সদস্যের নাম লিখে অ্যাড করুন।',
+          'success'
+        );
+        return;
+      }
+
+      // 2. Fallback to Microlink + Unavatar Dynamic Facebook Profile Picture
+      const fbUser = extractFbUsername(targetUrl);
+      const dynamicAvatar = fbUser ? `https://unavatar.io/facebook/${encodeURIComponent(fbUser)}` : '';
+      const fallbackName = extractFbNameFromUrl(targetUrl);
+
       const res = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}`);
       if (res.ok) {
         const json = await res.json();
@@ -2123,33 +2400,41 @@ export default function App() {
           cleanTitle.toLowerCase().includes('log in') ||
           cleanTitle.toLowerCase().includes('লগ ইন');
 
-        const fallbackName = extractFbNameFromUrl(targetUrl);
         const resolvedName = !isGenericFbTitle ? cleanTitle : fallbackName;
+        const resolvedAvatar =
+          imgUrl && !imgUrl.includes('static.xx.fbcdn.net') ? imgUrl : dynamicAvatar;
 
         setQuickMemberForm((prev) => ({
           ...prev,
           fb_url: targetUrl,
           name: resolvedName || prev.name,
-          avatar_url: imgUrl && !imgUrl.includes('static.xx.fbcdn.net') ? imgUrl : prev.avatar_url
+          avatar_url: resolvedAvatar || prev.avatar_url
         }));
 
-        if (resolvedName || (imgUrl && !imgUrl.includes('static.xx.fbcdn.net'))) {
-          showNotice('ফেসবুক লিংক থেকে তথ্য যুক্ত করা হয়েছে! প্রয়োজনে নাম বা ছবি পরিবর্তন করতে পারেন।', 'success');
+        if (resolvedName) {
+          showNotice('ফেসবুক প্রোফাইল থেকে নাম ও ডাইনামিক ছবি সংযুক্ত হয়েছে!', 'success');
         } else {
-          showNotice('প্রোফাইলটি প্রাইভেসি লক থাকায় নাম ও ছবি নিচে লিখে বা আপলোড করে যুক্ত করুন।', 'success');
+          showNotice('ফেসবুক প্রোফাইলটি লক থাকায় শুধু নাম ও ছবি দিয়ে "সদস্য তালিকায় যুক্ত করুন" বাটনে ক্লিক করুন।', 'success');
         }
       } else {
-        const fallbackName = extractFbNameFromUrl(targetUrl);
-        if (fallbackName) {
-          setQuickMemberForm((prev) => ({ ...prev, name: prev.name || fallbackName }));
-        }
-        showNotice('লিংকটি যুক্ত হয়েছে। সদস্যের নাম ও ছবি সিলেক্ট করে অ্যাড করুন।', 'success');
+        setQuickMemberForm((prev) => ({
+          ...prev,
+          fb_url: targetUrl,
+          name: prev.name || fallbackName,
+          avatar_url: prev.avatar_url || dynamicAvatar
+        }));
+        showNotice('লিংকটি যুক্ত হয়েছে। সদস্যের নাম লিখে অ্যাড করুন।', 'success');
       }
     } catch {
+      const fbUser = extractFbUsername(targetUrl);
+      const dynamicAvatar = fbUser ? `https://unavatar.io/facebook/${encodeURIComponent(fbUser)}` : '';
       const fallbackName = extractFbNameFromUrl(targetUrl);
-      if (fallbackName) {
-        setQuickMemberForm((prev) => ({ ...prev, name: prev.name || fallbackName }));
-      }
+      setQuickMemberForm((prev) => ({
+        ...prev,
+        fb_url: targetUrl,
+        name: prev.name || fallbackName,
+        avatar_url: prev.avatar_url || dynamicAvatar
+      }));
     } finally {
       setFetchingFbInfo(false);
     }
@@ -2161,8 +2446,8 @@ export default function App() {
     setUploadState({ active: true, percent: 0, label: 'নতুন সদস্যের ছবি আপলোড হচ্ছে...' });
     try {
       const uploadedUrl = await uploadMediaToCloudinary(file, (percent) => {
-        setUploadState({ active: true, percent, label: 'নতুন সদস্যের ছবি আপলোড হচ্ছে...' });
-      });
+        setUploadState({ active: true, percent, label: 'নতুন সদস্যের ছবি কম্প্রেস ও আপলোড হচ্ছে...' });
+      }, 'avatar');
       setQuickMemberForm((prev) => ({ ...prev, avatar_url: uploadedUrl }));
       await autoRecordInGallery(uploadedUrl);
       showNotice('সদস্যের ছবি ক্লাউডিনারিতে আপলোড হয়েছে!', 'success');
@@ -2175,14 +2460,17 @@ export default function App() {
 
   const handleQuickMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickMemberForm.name.trim()) {
-      showNotice('সদস্যের নাম লিখুন।', 'error');
+    const resolvedName =
+      quickMemberForm.name.trim() ||
+      extractFbNameFromUrl(quickMemberForm.fb_url);
+    if (!resolvedName) {
+      showNotice('অনুগ্রহ করে সদস্যের নাম বক্সে নাম লিখুন।', 'error');
       return;
     }
     const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `mem-${Date.now()}`;
     const newMember: MemberUser = {
       id: newId,
-      name: quickMemberForm.name.trim(),
+      name: resolvedName,
       email: `member.${Date.now()}@noboalo.org`,
       mobile: '',
       avatar_url: quickMemberForm.avatar_url.trim(),
@@ -2223,9 +2511,10 @@ export default function App() {
     setUploadState({ active: true, percent: 0, label: 'সদস্যের ছবি আপলোড হচ্ছে...' });
     try {
       const uploadedUrl = await uploadMediaToCloudinary(file, (percent) => {
-        setUploadState({ active: true, percent, label: 'সদস্যের ছবি আপলোড হচ্ছে...' });
-      });
+        setUploadState({ active: true, percent, label: 'সদস্যের ছবি কম্প্রেস ও আপলোড হচ্ছে...' });
+      }, 'avatar');
       setEditingMember((prev) => (prev ? { ...prev, avatar_url: uploadedUrl } : null));
+      await autoRecordInGallery(uploadedUrl);
       showNotice('ছবি সফলভাবে ক্লাউডিনারিতে আপলোড হয়েছে!', 'success');
     } catch (err: any) {
       showNotice(err?.message || 'ছবি আপলোড ব্যর্থ হয়েছে।', 'error');
@@ -2684,7 +2973,7 @@ export default function App() {
     try {
       const uploadedUrl = await uploadMediaToCloudinary(file, (percent) => {
         setUploadState({ active: true, percent, label: 'সাইট লোগো ও ফেভিকন আপলোড হচ্ছে...' });
-      });
+      }, 'logo');
       const nextSettings = {
         ...siteSettings,
         logo_url: uploadedUrl,
@@ -2707,7 +2996,7 @@ export default function App() {
     try {
       const uploadedUrl = await uploadMediaToCloudinary(file, (percent) => {
         setUploadState({ active: true, percent, label: 'ফেভিকন (Favicon) আপলোড হচ্ছে...' });
-      });
+      }, 'logo');
       const nextSettings = { ...siteSettings, favicon_url: uploadedUrl };
       await persistSettingsInstant(nextSettings);
       await autoRecordInGallery(uploadedUrl);
@@ -2774,8 +3063,8 @@ export default function App() {
     setUploadState({ active: true, percent: 0, label: 'প্রোফাইল ছবি আপলোড হচ্ছে...' });
     try {
       const uploadedUrl = await uploadMediaToCloudinary(file, (percent) => {
-        setUploadState({ active: true, percent, label: 'প্রোফাইল ছবি আপলোড হচ্ছে...' });
-      });
+        setUploadState({ active: true, percent, label: 'প্রোফাইল ছবি কম্প্রেস ও আপলোড হচ্ছে...' });
+      }, 'avatar');
       const updatedUser = { ...appUser, avatar_url: uploadedUrl };
       setAppUser(updatedUser);
       setMembers((prev) => prev.map((m) => (m.id === updatedUser.id ? updatedUser : m)));
@@ -2867,16 +3156,37 @@ export default function App() {
   // ============================================================================
   return (
     <div className="min-h-screen flex flex-col bg-[#F4F7F5] text-[#0A2F25] overflow-x-hidden w-full max-w-[100vw] selection:bg-[#D4AF37] selection:text-[#0A2F25]">
-      {/* 1. ROYAL ISLAMIC ARCHITECTURAL GOLD FILIGREE TOP CROWN BORDER (NO RIBBON) */}
-      <div className="h-1.5 w-full bg-gradient-to-r from-[#0A2F25] via-[#D4AF37] to-[#0A2F25]" />
+      {/* 1. TOP MARQUEE ANNOUNCEMENT BAR (PURE SVG ICONS, EDITABLE BY ADMIN) */}
+      <div
+        className="w-full overflow-hidden py-1.5 border-b border-[#D4AF37]/40 text-[#FFFFFF]"
+        style={{ background: 'linear-gradient(90deg, #0A2F25, #155e4a, #0A2F25)' }}
+      >
+        <div className="animate-marquee flex items-center gap-8 text-xs sm:text-sm font-medium text-[#FFFFFF]">
+          {[0, 1, 2, 3].map((repeatIdx) => (
+            <span key={repeatIdx} className="inline-flex items-center gap-3">
+              <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+              <span className="text-[#FFFFFF] tracking-wide">
+                {siteSettings.announcement_text || DEFAULT_ANNOUNCEMENT}
+              </span>
+              <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+              <span className="text-[#F3D568] tracking-wide font-semibold">
+                {siteSettings.site_name || DEFAULT_SITE_NAME} — {siteSettings.tagline || DEFAULT_TAGLINE}
+              </span>
+            </span>
+          ))}
+        </div>
+      </div>
 
-      {/* 2. MOBILE-FIRST HEADER / NAVBAR WITH CLEAN URL ROUTE SUPPORT */}
-      <header className="sticky top-0 z-30 bg-[#0A2F25]/95 backdrop-blur-lg border-b-2 border-[#D4AF37]/55 shadow-[0_8px_30px_rgba(10,47,37,0.32)]">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2">
+      {/* 2. MOBILE-FIRST HEADER / NAVBAR WITH MODERN PROFILE AVATAR POPUP */}
+      <header className="sticky top-0 z-30 bg-[#0A2F25]/95 backdrop-blur-lg border-b border-[#D4AF37]/45 shadow-[0_8px_30px_rgba(10,47,37,0.28)]">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 relative">
           {/* Left Side: Circular White-BG Logo + Site Name */}
           <button
             type="button"
-            onClick={() => setCurrentView('home')}
+            onClick={() => {
+              setHeaderProfileMenuOpen(false);
+              setCurrentView('home');
+            }}
             className="flex items-center gap-2.5 sm:gap-3 text-left group focus:outline-none min-w-0"
           >
             <div className="p-0.5 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-md group-hover:scale-105 transition-transform">
@@ -2895,11 +3205,14 @@ export default function App() {
             </div>
           </button>
 
-          {/* Right Side Navigation Buttons (NO Hamburger Menu, NO Login button, NO Logout button) */}
-          <nav className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Right Side Navigation Buttons + Modern Profile Avatar Button */}
+          <nav className="flex items-center gap-2 sm:gap-2.5 shrink-0">
             <button
               type="button"
-              onClick={() => setCurrentView('members')}
+              onClick={() => {
+                setHeaderProfileMenuOpen(false);
+                setCurrentView('members');
+              }}
               className={`inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all border ${
                 currentView === 'members'
                   ? 'bg-[#D4AF37] text-[#0A2F25] border-[#F3D568] shadow-md'
@@ -2925,19 +3238,150 @@ export default function App() {
                 <span className="hidden md:inline">যুক্ত হোন</span>
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => setCurrentView('dashboard')}
-                aria-label="ড্যাশবোর্ড"
-                className={`inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md border ${
-                  currentView === 'dashboard'
-                    ? 'bg-[#F3D568] text-[#0A2F25] border-white'
-                    : 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] hover:brightness-105'
-                }`}
-              >
-                <LayoutDashboard className="w-4 h-4 shrink-0" />
-                <span className="hidden md:inline">ড্যাশবোর্ড</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHeaderProfileMenuOpen(false);
+                    setCurrentView('dashboard');
+                  }}
+                  aria-label="ড্যাশবোর্ড"
+                  className={`inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md border ${
+                    currentView === 'dashboard'
+                      ? 'bg-[#F3D568] text-[#0A2F25] border-white'
+                      : 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] hover:brightness-105'
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  <span className="hidden md:inline">ড্যাশবোর্ড</span>
+                </button>
+
+                {/* Modern Circular Profile Avatar Button Next to Dashboard */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setHeaderProfileMenuOpen((prev) => !prev)}
+                    aria-label="প্রোফাইল মেনু"
+                    className="relative w-10 h-10 rounded-full p-0.5 bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-md hover:scale-105 transition-transform focus:outline-none"
+                  >
+                    <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center font-bold text-sm overflow-hidden">
+                      {appUser.avatar_url ? (
+                        <img
+                          src={optimizeMedia(appUser.avatar_url)}
+                          alt={appUser.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span>{appUser.name.charAt(0)}</span>
+                      )}
+                    </div>
+                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0A2F25]" />
+                  </button>
+
+                  {/* Modern Profile Popover Menu */}
+                  {headerProfileMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setHeaderProfileMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 mt-2.5 w-72 sm:w-80 rounded-3xl bg-white text-[#0A2F25] border-2 border-[#D4AF37]/60 shadow-2xl z-50 overflow-hidden animate-fadeIn">
+                        <div className="bg-gradient-to-r from-[#0A2F25] via-[#124A3B] to-[#0A2F25] p-4 text-white">
+                          <div className="flex items-center gap-3">
+                            <div className="relative w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-[#D4AF37] to-[#F3D568] shrink-0">
+                              <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center text-lg font-bold overflow-hidden">
+                                {appUser.avatar_url ? (
+                                  <img
+                                    src={optimizeMedia(appUser.avatar_url)}
+                                    alt={appUser.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <span>{appUser.name.charAt(0)}</span>
+                                )}
+                              </div>
+                              <label
+                                title="প্রোফাইল ছবি পরিবর্তন করুন"
+                                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#D4AF37] text-[#0A2F25] flex items-center justify-center shadow cursor-pointer hover:scale-110 transition-transform"
+                              >
+                                <Upload className="w-3 h-3" />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleMyProfileAvatarUpload}
+                                  className="hidden"
+                                />
+                              </label>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-sm sm:text-base text-white truncate">
+                                {appUser.name}
+                              </p>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#D4AF37] text-[#0A2F25] mt-0.5">
+                                <ShieldCheck className="w-3 h-3" />
+                                <span>{appUser.designation || (appUser.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')}</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-4 space-y-2.5 text-xs border-b border-gray-100 bg-[#F4F7F5]/60">
+                          <div className="flex items-center gap-2 text-gray-700">
+                            <Mail className="w-3.5 h-3.5 text-[#155e4a] shrink-0" />
+                            <span className="font-english truncate">{appUser.email}</span>
+                          </div>
+                          {appUser.mobile && (
+                            <div className="flex items-center gap-2 text-gray-700">
+                              <Phone className="w-3.5 h-3.5 text-[#155e4a] shrink-0" />
+                              <span className="font-english">{appUser.mobile}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="p-3 space-y-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHeaderProfileMenuOpen(false);
+                              setActiveTab('my_profile');
+                              setCurrentView('dashboard');
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-[#0A2F25] hover:bg-[#0A2F25]/10 transition"
+                          >
+                            <User className="w-4 h-4 text-[#155e4a]" />
+                            <span>প্রোফাইল ও পাসওয়ার্ড আপডেট</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHeaderProfileMenuOpen(false);
+                              setActiveTab(appUser.role === 'admin' ? 'overview' : 'my_account');
+                              setCurrentView('dashboard');
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-[#0A2F25] hover:bg-[#0A2F25]/10 transition"
+                          >
+                            <LayoutDashboard className="w-4 h-4 text-[#155e4a]" />
+                            <span>ড্যাশবোর্ডে যান</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHeaderProfileMenuOpen(false);
+                              handleLogout();
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-red-600 hover:bg-red-50 transition"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            <span>লগআউট করুন</span>
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
             )}
           </nav>
         </div>
@@ -3000,8 +3444,8 @@ export default function App() {
         {/* ================================================================== */}
         {currentView === 'home' && (
           <div>
-            {/* A. ROYAL ISLAMIC ARCHITECTURE HERO SECTION (MIHRAB ARCH, HANGING FANOUS LANTERNS & MOSQUE SKYLINE) */}
-            <section className="relative overflow-hidden bg-[#0A2F25] text-white min-h-[520px] sm:min-h-[610px] flex flex-col items-center justify-center pt-14 pb-20 sm:pt-20 sm:pb-28 px-4 border-b-4 border-[#D4AF37]">
+            {/* A. CLEAN LUXURY EMERALD & GOLD HERO SECTION (PURE SVG, ZERO EMOJIS/MOSQUE SHAPES) */}
+            <section className="relative overflow-hidden bg-[#0A2F25] text-white min-h-[470px] sm:min-h-[540px] flex flex-col items-center justify-center py-14 sm:py-20 px-4 border-b-4 border-[#D4AF37]">
               {/* Fading Background Banner Slideshow */}
               {validBanners.map((bannerUrl, idx) => (
                 <div
@@ -3017,49 +3461,16 @@ export default function App() {
                 />
               ))}
 
-              {/* Deep Emerald Mosque Sanctuary Vignette */}
+              {/* Deep Emerald Sanctuary Vignette & Soft Golden Radial Aura */}
               <div
                 className="absolute inset-0"
                 style={{
                   background:
-                    'radial-gradient(circle at 50% 38%, rgba(21,94,74,0.68) 0%, rgba(10,47,37,0.93) 68%, rgba(4,20,15,0.99) 100%)'
+                    'radial-gradient(circle at 50% 42%, rgba(21,94,74,0.65) 0%, rgba(10,47,37,0.92) 70%, rgba(5,24,19,0.98) 100%)'
                 }}
               />
 
-              {/* Grand Islamic Pointed Mihrab Archway & Corner Arabesque Spandrels SVG */}
-              <svg
-                className="pointer-events-none select-none absolute inset-0 w-full h-full opacity-45"
-                viewBox="0 0 1440 700"
-                preserveAspectRatio="none"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                {/* Outer & Inner Pointed Islamic Mihrab Arch Lines */}
-                <path
-                  d="M60,700 L60,240 C60,110 420,28 720,10 C1020,28 1380,110 1380,240 L1380,700"
-                  stroke="#D4AF37"
-                  strokeWidth="2.5"
-                  strokeOpacity="0.65"
-                />
-                <path
-                  d="M84,700 L84,252 C84,130 430,48 720,28 C1010,48 1356,130 1356,252 L1356,700"
-                  stroke="#F3D568"
-                  strokeWidth="1.2"
-                  strokeDasharray="8 6"
-                  strokeOpacity="0.55"
-                />
-                {/* Left & Right Corner Geometric Arabesque Rosettes */}
-                <circle cx="140" cy="95" r="42" stroke="#D4AF37" strokeWidth="1.4" strokeOpacity="0.45" />
-                <circle cx="140" cy="95" r="24" stroke="#F3D568" strokeWidth="1" strokeDasharray="4 3" strokeOpacity="0.45" />
-                <circle cx="1300" cy="95" r="42" stroke="#D4AF37" strokeWidth="1.4" strokeOpacity="0.45" />
-                <circle cx="1300" cy="95" r="24" stroke="#F3D568" strokeWidth="1" strokeDasharray="4 3" strokeOpacity="0.45" />
-              </svg>
-
-              {/* Hanging Golden Moroccan Fanous Lanterns (Left & Right) */}
-              <IslamicHangingLantern side="left" />
-              <IslamicHangingLantern side="right" />
-
-              {/* Rotating SVG Islamic Geometric Mandalas */}
+              {/* Subtle Corner Rotating SVG Geometric Rosettes */}
               <div className="absolute -left-28 -top-28 opacity-35">
                 <IslamicMandala className="animate-mandala" size={400} />
               </div>
@@ -3067,19 +3478,12 @@ export default function App() {
                 <IslamicMandala className="animate-mandala-reverse" size={440} />
               </div>
 
-              {/* Hero Center Architectural Content */}
+              {/* Hero Center Content */}
               <div className="relative z-10 max-w-3xl mx-auto text-center flex flex-col items-center">
-                {/* Sacred Bismillah & Rub el Hizb (۞) Pointed Arch Crest */}
-                <div className="inline-flex items-center gap-2.5 px-5 py-1.5 rounded-t-2xl rounded-b-lg bg-[#07211A]/85 border-2 border-[#D4AF37]/75 text-[#F3D568] text-xs sm:text-sm font-semibold mb-5 shadow-[0_0_25px_rgba(212,175,55,0.28)] backdrop-blur-md">
-                  <span className="text-[#D4AF37] text-sm">۞</span>
-                  <span className="tracking-wider">বিসমিল্লাহির রাহমানির রাহিম</span>
-                  <span className="text-[#D4AF37] text-sm">۞</span>
-                </div>
-
-                {/* Royal 8-Pointed Star Medallion Framing the Circular Logo */}
-                <div className="relative mb-6 flex items-center justify-center">
-                  <div className="absolute -inset-3 rounded-full bg-gradient-to-tr from-[#D4AF37]/30 via-[#F3D568]/20 to-[#D4AF37]/30 blur-md animate-pulse" />
-                  <div className="relative p-1.5 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-[0_0_45px_rgba(212,175,55,0.5)]">
+                {/* Floating Circular White-BG Logo with Soft Golden Halo */}
+                <div className="relative mb-5 flex items-center justify-center">
+                  <div className="absolute -inset-2.5 rounded-full bg-gradient-to-tr from-[#D4AF37]/30 via-[#F3D568]/20 to-[#D4AF37]/30 blur-md" />
+                  <div className="relative p-1.5 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-[0_0_40px_rgba(212,175,55,0.45)]">
                     <WhiteCircularLogo
                       logoUrl={siteSettings.logo_url}
                       sizeClass="w-20 h-20 sm:w-24 sm:h-24"
@@ -3087,11 +3491,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Illuminated Islamic Arch Motto Plaque (Replaces Old Top Ribbon) */}
-                <div className="inline-flex items-center gap-2 px-5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-[#D4AF37]/60 text-[#F3D568] text-xs sm:text-sm font-semibold mb-4 shadow-sm">
-                  <span className="text-[#D4AF37]">☪</span>
-                  <span>{siteSettings.announcement_text || 'মানবতা, ভ্রাতৃত্ব ও কল্যাণের অঙ্গীকার'}</span>
-                  <span className="text-[#D4AF37]">☪</span>
+                {/* Golden Filigree Pill Badge (100% Pure SVG Icons) */}
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-[#D4AF37]/55 text-[#F3D568] text-xs sm:text-sm font-semibold mb-4 shadow-sm">
+                  <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+                  <span>মানবতা, ভ্রাতৃত্ব ও কল্যাণের অঙ্গীকার</span>
+                  <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
                 </div>
 
                 <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white leading-snug sm:leading-tight mb-4 drop-shadow-lg">
@@ -3136,24 +3540,6 @@ export default function App() {
                     ))}
                   </div>
                 )}
-              </div>
-
-              {/* Bottom Mosque Dome & Minaret Horizon Silhouette */}
-              <div className="pointer-events-none select-none absolute bottom-0 inset-x-0 z-10 overflow-hidden leading-none">
-                <svg
-                  viewBox="0 0 1440 74"
-                  className="w-full h-10 sm:h-14 md:h-16"
-                  preserveAspectRatio="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M0,74 L0,56 L90,56 L98,22 L106,56 L180,56 Q220,24 260,56 L390,56 Q450,12 510,56 L610,56 L618,10 L626,56 L660,56 Q720,-6 780,56 L814,56 L822,10 L830,56 L930,56 Q990,12 1050,56 L1180,56 Q1220,24 1260,56 L1334,56 L1342,22 L1350,56 L1440,56 L1440,74 Z"
-                    fill="#07211A"
-                    fillOpacity="0.72"
-                    stroke="#D4AF37"
-                    strokeWidth="1.5"
-                  />
-                </svg>
               </div>
             </section>
 
@@ -3289,7 +3675,7 @@ export default function App() {
                               <span>বিস্তারিত ও মিডিয়া দেখুন</span>
                             </span>
                             <span className="w-7 h-7 rounded-full bg-[#0A2F25]/5 group-hover:bg-[#0A2F25] group-hover:text-[#F3D568] flex items-center justify-center transition-all">
-                              →
+                              <ChevronRight className="w-4 h-4" />
                             </span>
                           </div>
                         </div>
@@ -3464,45 +3850,47 @@ export default function App() {
         )}
 
         {/* ================================================================== */}
-        {/* VIEW 3: JOIN / REGISTRATION VIEW (`join`)                          */}
+        {/* VIEW 3: JOIN VIEW (`join` — Modern Sign Up with BD Phone Detection) */}
         {/* ================================================================== */}
         {currentView === 'join' && (
-          <section className="max-w-md mx-auto px-4 py-10 sm:py-14">
-            <div className="bg-white rounded-3xl border-2 border-[#D4AF37]/50 shadow-2xl overflow-hidden">
-              <div className="bg-gradient-to-r from-[#0A2F25] via-[#124A3B] to-[#0A2F25] p-6 text-center text-white border-b border-[#D4AF37]/40">
+          <section className="max-w-lg mx-auto px-4 py-10 sm:py-14">
+            <div className="bg-white rounded-3xl border-2 border-[#D4AF37]/55 shadow-2xl overflow-hidden">
+              <div className="bg-gradient-to-r from-[#0A2F25] via-[#124A3B] to-[#0A2F25] p-6 sm:p-7 text-center text-white border-b border-[#D4AF37]/40 relative overflow-hidden">
                 <div className="flex justify-center mb-3">
-                  <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-14 h-14" />
+                  <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-16 h-16" />
                 </div>
                 <h2 className="text-xl sm:text-2xl font-bold">সদস্য হিসেবে যুক্ত হোন</h2>
-                <p className="text-xs text-[#F3D568] mt-1">
-                  নব আলো ফাউন্ডেশনের মানবিক পরিবারে আপনাকে স্বাগতম
+                <p className="text-xs sm:text-sm text-[#F3D568] mt-1">
+                  নব আলো ফাউন্ডেশনের মানবিক পরিবারের একজন গর্বিত সদস্য হতে ফর্মটি পূরণ করুন
                 </p>
               </div>
 
               <form onSubmit={handleJoinSubmit} className="p-5 sm:p-7 space-y-4">
+                {/* 1. Full Name */}
                 <div>
-                  <label className="block text-xs sm:text-sm font-semibold text-[#0A2F25] mb-1">
+                  <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
                     পূর্ণ নাম *
                   </label>
                   <div className="relative">
-                    <User className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <User className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       required
                       value={joinForm.name}
                       onChange={(e) => setJoinForm((p) => ({ ...p, name: e.target.value }))}
-                      placeholder="আপনার পূর্ণ নাম"
+                      placeholder="আপনার পূর্ণ নাম লিখুন"
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25] focus:ring-1 focus:ring-[#0A2F25]"
                     />
                   </div>
                 </div>
 
+                {/* 2. Email Address */}
                 <div>
-                  <label className="block text-xs sm:text-sm font-semibold text-[#0A2F25] mb-1">
-                    ইমেইল এড্রেস *
+                  <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
+                    ইমেইল অ্যাড্রেস *
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Mail className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="email"
                       required
@@ -3514,57 +3902,98 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 3. Bangladeshi Mobile Number with Live Smart Detection */}
                 <div>
-                  <label className="block text-xs sm:text-sm font-semibold text-[#0A2F25] mb-1">
-                    মোবাইল নাম্বার *
+                  <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
+                    বাংলাদেশি মোবাইল নাম্বার (১১ ডিজিট) *
                   </label>
                   <div className="relative">
-                    <Phone className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Phone className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="tel"
                       required
                       value={joinForm.mobile}
                       onChange={(e) => setJoinForm((p) => ({ ...p, mobile: e.target.value }))}
-                      placeholder="01XXXXXXXXX"
+                      placeholder="017XXXXXXXX"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25] focus:ring-1 focus:ring-[#0A2F25]"
+                    />
+                  </div>
+                  {joinForm.mobile.trim().length > 0 && (() => {
+                    const check = analyzeBdPhone(joinForm.mobile);
+                    return check.isValidBd ? (
+                      <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>সঠিক বাংলাদেশি নাম্বার ({check.normalized} • {check.operator})</span>
+                      </div>
+                    ) : (
+                      <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>০১ দিয়ে শুরু হওয়া ১১ ডিজিটের সঠিক বাংলাদেশি নাম্বার দিন</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* 4. Optional Facebook Profile Link */}
+                <div>
+                  <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
+                    ফেসবুক প্রোফাইল লিংক (ঐচ্ছিক)
+                  </label>
+                  <div className="relative">
+                    <Facebook className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="url"
+                      value={joinForm.fb_url}
+                      onChange={(e) => setJoinForm((p) => ({ ...p, fb_url: e.target.value }))}
+                      placeholder="https://facebook.com/username"
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25] focus:ring-1 focus:ring-[#0A2F25]"
                     />
                   </div>
                 </div>
 
+                {/* 5. Password with Show/Hide SVG Toggle */}
                 <div>
-                  <label className="block text-xs sm:text-sm font-semibold text-[#0A2F25] mb-1">
+                  <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
                     পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) *
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Lock className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
-                      type="password"
+                      type={showJoinPassword ? 'text' : 'password'}
                       required
                       minLength={6}
                       value={joinForm.password}
                       onChange={(e) => setJoinForm((p) => ({ ...p, password: e.target.value }))}
-                      placeholder="••••••"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25] focus:ring-1 focus:ring-[#0A2F25]"
+                      placeholder="কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড"
+                      className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25] focus:ring-1 focus:ring-[#0A2F25]"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowJoinPassword((p) => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#0A2F25]"
+                      aria-label="পাসওয়ার্ড দেখুন"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="btn-glossy-emerald w-full py-3 rounded-xl bg-gradient-to-r from-[#0A2F25] to-[#155e4a] text-[#F3D568] border border-[#D4AF37] font-bold text-sm sm:text-base shadow-lg hover:opacity-95 transition disabled:opacity-60"
+                  className="btn-glossy-emerald w-full py-3 rounded-xl bg-gradient-to-r from-[#0A2F25] to-[#155e4a] text-[#F3D568] border border-[#D4AF37] font-bold text-sm sm:text-base shadow-lg hover:opacity-95 transition disabled:opacity-60 flex items-center justify-center gap-2"
                 >
-                  {authLoading ? 'প্রসেসিং হচ্ছে...' : 'রেজিস্ট্রেশন সম্পন্ন করুন'}
+                  <UserPlus className="w-4 h-4" />
+                  <span>{authLoading ? 'প্রসেসিং হচ্ছে...' : 'রেজিস্ট্রেশন সম্পন্ন করুন'}</span>
                 </button>
 
-                {/* Login Link Location at bottom of Join Card */}
                 <div className="pt-4 border-t border-gray-100 text-center">
                   <button
                     type="button"
                     onClick={() => setCurrentView('login')}
-                    className="text-xs sm:text-sm font-semibold text-[#155e4a] hover:text-[#0A2F25] underline underline-offset-4 transition"
+                    className="text-xs sm:text-sm font-bold text-[#155e4a] hover:text-[#0A2F25] underline underline-offset-4 transition"
                   >
-                    আগেই একাউন্ট করা থাকলে লগইন করুন
+                    আগেই একাউন্ট করা থাকলে এখানে লগইন করুন
                   </button>
                 </div>
               </form>
@@ -3573,53 +4002,91 @@ export default function App() {
         )}
 
         {/* ================================================================== */}
-        {/* VIEW 4: LOGIN VIEW (`login`)                                       */}
+        {/* VIEW 4: LOGIN VIEW (`login` — Email OR Bangladeshi Mobile Number)  */}
         {/* ================================================================== */}
         {(currentView === 'login' || (currentView === 'dashboard' && !appUser)) && (
           <section className="max-w-md mx-auto px-4 py-10 sm:py-14">
-            <div className="bg-white rounded-3xl border-2 border-[#D4AF37]/50 shadow-2xl overflow-hidden">
-              <div className="bg-gradient-to-r from-[#0A2F25] via-[#124A3B] to-[#0A2F25] p-6 text-center text-white border-b border-[#D4AF37]/40">
+            <div className="bg-white rounded-3xl border-2 border-[#D4AF37]/55 shadow-2xl overflow-hidden">
+              <div className="bg-gradient-to-r from-[#0A2F25] via-[#124A3B] to-[#0A2F25] p-6 sm:p-7 text-center text-white border-b border-[#D4AF37]/40">
                 <div className="flex justify-center mb-3">
-                  <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-14 h-14" />
+                  <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-16 h-16" />
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold">সদস্য লগইন</h2>
-                <p className="text-xs text-[#F3D568] mt-1">
-                  আপনার ইমেইল ও পাসওয়ার্ড দিয়ে ড্যাশবোর্ডে প্রবেশ করুন
+                <h2 className="text-xl sm:text-2xl font-bold">সদস্য ও অ্যাডমিন লগইন</h2>
+                <p className="text-xs sm:text-sm text-[#F3D568] mt-1">
+                  আপনার ইমেইল অথবা বাংলাদেশি মোবাইল নাম্বার ও পাসওয়ার্ড দিয়ে প্রবেশ করুন
                 </p>
               </div>
 
               <form onSubmit={handleLoginSubmit} className="p-5 sm:p-7 space-y-4">
                 <div>
-                  <label className="block text-xs sm:text-sm font-semibold text-[#0A2F25] mb-1">
-                    ইমেইল এড্রেস *
+                  <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
+                    ইমেইল অ্যাড্রেস অথবা মোবাইল নাম্বার *
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    {analyzeBdPhone(loginForm.email).looksLikePhone ? (
+                      <Phone className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    ) : (
+                      <Mail className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    )}
                     <input
-                      type="email"
+                      type="text"
                       required
                       value={loginForm.email}
                       onChange={(e) => setLoginForm((p) => ({ ...p, email: e.target.value }))}
-                      placeholder="example@gmail.com"
+                      placeholder="example@gmail.com অথবা 017XXXXXXXX"
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25] focus:ring-1 focus:ring-[#0A2F25]"
                     />
                   </div>
+                  {loginForm.email.trim().length > 0 && (() => {
+                    const raw = loginForm.email.trim();
+                    const bd = analyzeBdPhone(raw);
+                    if (bd.looksLikePhone) {
+                      return bd.isValidBd ? (
+                        <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>বাংলাদেশি মোবাইল নাম্বার শনাক্ত হয়েছে ({bd.normalized})</span>
+                        </div>
+                      ) : (
+                        <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>১১ ডিজিটের সঠিক বাংলাদেশি মোবাইল নাম্বার দিন (01XXXXXXXXX)</span>
+                        </div>
+                      );
+                    }
+                    if (raw.includes('@')) {
+                      return (
+                        <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-[#0A2F25] bg-[#0A2F25]/5 border border-[#D4AF37]/40 px-2.5 py-1 rounded-lg">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#155e4a] shrink-0" />
+                          <span>ইমেইল অ্যাড্রেস শনাক্ত হয়েছে</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
 
                 <div>
-                  <label className="block text-xs sm:text-sm font-semibold text-[#0A2F25] mb-1">
+                  <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
                     পাসওয়ার্ড *
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Lock className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
-                      type="password"
+                      type={showLoginPassword ? 'text' : 'password'}
                       required
                       value={loginForm.password}
                       onChange={(e) => setLoginForm((p) => ({ ...p, password: e.target.value }))}
                       placeholder="••••••"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25] focus:ring-1 focus:ring-[#0A2F25]"
+                      className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25] focus:ring-1 focus:ring-[#0A2F25]"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword((p) => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#0A2F25]"
+                      aria-label="পাসওয়ার্ড দেখুন"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -3635,7 +4102,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setCurrentView('join')}
-                    className="text-xs sm:text-sm font-semibold text-[#155e4a] hover:text-[#0A2F25] underline underline-offset-4 transition"
+                    className="text-xs sm:text-sm font-bold text-[#155e4a] hover:text-[#0A2F25] underline underline-offset-4 transition"
                   >
                     নতুন সদস্য হতে চাইলে এখানে রেজিস্ট্রেশন করুন
                   </button>
@@ -3863,30 +4330,25 @@ export default function App() {
 
                     <div>
                       <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                        পদবী / ক্যাটাগরি (Designation) *
+                        পদবি / ক্যাটাগরি নির্বাচন করুন *
                       </label>
-                      <input
-                        type="text"
-                        list="member-designations-datalist"
+                      <select
                         value={quickMemberForm.designation}
                         onChange={(e) =>
                           setQuickMemberForm((p) => ({ ...p, designation: e.target.value }))
                         }
-                        placeholder="যেমন: সভাপতি / সাধারণ সদস্য"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
-                      />
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white text-sm font-semibold text-[#0A2F25] focus:outline-none focus:border-[#0A2F25]"
+                      >
+                        {activeDesignations.map((desig) => (
+                          <option key={desig} value={desig}>
+                            {desig}
+                          </option>
+                        ))}
+                      </select>
                       <datalist id="member-designations-datalist">
-                        <option value="সভাপতি" />
-                        <option value="সহ-সভাপতি" />
-                        <option value="সাধারণ সম্পাদক" />
-                        <option value="যুগ্ম সাধারণ সম্পাদক" />
-                        <option value="সাংগঠনিক সম্পাদক" />
-                        <option value="কোষাধ্যক্ষ" />
-                        <option value="প্রচার সম্পাদক" />
-                        <option value="শিক্ষা ও কল্যাণ সম্পাদক" />
-                        <option value="কার্যকরী সদস্য" />
-                        <option value="অ্যাডমিন" />
-                        <option value="সাধারণ সদস্য" />
+                        {activeDesignations.map((desig) => (
+                          <option key={desig} value={desig} />
+                        ))}
                       </datalist>
                     </div>
 
@@ -3961,6 +4423,106 @@ export default function App() {
                     <span>সদস্য তালিকায় যুক্ত করুন</span>
                   </button>
                 </form>
+
+                {/* Designation / Category CRUD Manager Section */}
+                <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#D4AF37]/50 shadow-sm space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
+                        পদবি ও ক্যাটাগরি ব্যবস্থাপনা ({activeDesignations.length}টি)
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        নতুন পদবি যুক্ত করুন অথবা যেকোনো পদবি এডিট বা ডিলিট করুন
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Add New Designation Bar */}
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <input
+                      type="text"
+                      value={newDesignationInput}
+                      onChange={(e) => setNewDesignationInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddDesignation();
+                        }
+                      }}
+                      placeholder="নতুন পদবির নাম লিখুন (যেমন: ত্রাণ ও সমাজকল্যাণ সম্পাদক)"
+                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddDesignation}
+                      className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#0A2F25] text-[#F3D568] border border-[#D4AF37] text-xs sm:text-sm font-bold shadow hover:opacity-95 transition shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>নতুন পদবি যুক্ত করুন</span>
+                    </button>
+                  </div>
+
+                  {/* Existing Designations Chips with Inline Edit & Delete */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {activeDesignations.map((desig, idx) => (
+                      <div
+                        key={`${desig}-${idx}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F4F7F5] border border-[#D4AF37]/40 text-xs font-semibold text-[#0A2F25]"
+                      >
+                        {editingDesignationIdx === idx ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={editingDesignationText}
+                              onChange={(e) => setEditingDesignationText(e.target.value)}
+                              className="w-32 px-2 py-0.5 rounded border border-[#0A2F25] bg-white text-xs focus:outline-none"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveEditedDesignation(idx)}
+                              className="p-1 rounded bg-emerald-600 text-white"
+                              title="সংরক্ষণ"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingDesignationIdx(null)}
+                              className="p-1 rounded bg-gray-300 text-gray-700"
+                              title="বাতিল"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <span>{desig}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingDesignationIdx(idx);
+                                setEditingDesignationText(desig);
+                              }}
+                              className="p-1 rounded hover:bg-[#0A2F25]/10 text-[#155e4a]"
+                              title="পদবি এডিট করুন"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDesignation(desig)}
+                              className="p-1 rounded hover:bg-red-50 text-red-600"
+                              title="পদবি ডিলিট করুন"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <div className="bg-white rounded-2xl p-4 sm:p-5 border-2 border-[#D4AF37]/50 shadow-sm flex items-center justify-between gap-4">
                   <div>
                     <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
@@ -4081,7 +4643,24 @@ export default function App() {
                                 </div>
                               </td>
                               <td className="py-3 px-3 font-medium">
-                                {m.designation || (m.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')}
+                                <select
+                                  value={m.designation || (m.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')}
+                                  onChange={(e) => handleDesignationChange(m, e.target.value)}
+                                  className="px-2.5 py-1.5 rounded-xl border border-[#D4AF37]/50 bg-[#F4F7F5] hover:bg-white text-xs font-bold text-[#0A2F25] focus:outline-none focus:border-[#0A2F25] transition cursor-pointer"
+                                >
+                                  {!activeDesignations.includes(
+                                    m.designation || (m.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')
+                                  ) && (
+                                    <option value={m.designation}>
+                                      {m.designation}
+                                    </option>
+                                  )}
+                                  {activeDesignations.map((desig) => (
+                                    <option key={desig} value={desig}>
+                                      {desig}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="py-3 px-3 font-english">{m.sort_order ?? 100}</td>
                               <td className="py-3 px-3">
@@ -4490,7 +5069,7 @@ export default function App() {
                       />
                     </label>
 
-                    {/* Uploaded Media Thumbnails with ‹ and › Reorder Arrows and × Remove */}
+                    {/* Uploaded Media Thumbnails with SVG Reorder Arrows and Remove */}
                     {workForm.media.length > 0 && (
                       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
                         {workForm.media.map((url, idx) => (
@@ -4516,9 +5095,9 @@ export default function App() {
                               type="button"
                               onClick={() => removeWorkMedia(idx)}
                               aria-label="মুছে ফেলুন"
-                              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-600 text-white text-sm font-bold flex items-center justify-center shadow"
+                              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center shadow"
                             >
-                              ×
+                              <X className="w-3.5 h-3.5" />
                             </button>
 
                             <div className="absolute bottom-0 inset-x-0 bg-black/75 px-2 py-1 flex items-center justify-between text-white text-xs">
@@ -4526,18 +5105,18 @@ export default function App() {
                                 type="button"
                                 onClick={() => moveWorkMedia(idx, -1)}
                                 disabled={idx === 0}
-                                className="px-1.5 py-0.5 rounded bg-white/20 hover:bg-[#D4AF37] hover:text-[#0A2F25] disabled:opacity-30 font-bold"
+                                className="p-1 rounded bg-white/20 hover:bg-[#D4AF37] hover:text-[#0A2F25] disabled:opacity-30"
                               >
-                                ‹
+                                <ChevronLeft className="w-3.5 h-3.5" />
                               </button>
                               <span className="font-english text-[11px]">#{idx + 1}</span>
                               <button
                                 type="button"
                                 onClick={() => moveWorkMedia(idx, 1)}
                                 disabled={idx === workForm.media.length - 1}
-                                className="px-1.5 py-0.5 rounded bg-white/20 hover:bg-[#D4AF37] hover:text-[#0A2F25] disabled:opacity-30 font-bold"
+                                className="p-1 rounded bg-white/20 hover:bg-[#D4AF37] hover:text-[#0A2F25] disabled:opacity-30"
                               >
-                                ›
+                                <ChevronRight className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </div>
@@ -4678,7 +5257,7 @@ export default function App() {
               <div className="space-y-6">
                 <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#D4AF37]/40 shadow-sm">
                   <h3 className="text-base sm:text-lg font-bold text-[#0A2F25] mb-3">
-                    গ্যালারিতে ছবি বা ভিডিও আপলোড করুন (Cloudinary Folder: {CLOUDINARY_FOLDER_NAME})
+                    গ্যালারিতে নতুন ছবি বা ভিডিও আপলোড করুন
                   </h3>
                   <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#155e4a]/40 hover:border-[#D4AF37] rounded-2xl p-6 bg-[#F4F7F5] cursor-pointer transition">
                     <Upload className="w-7 h-7 text-[#155e4a] mb-2" />
@@ -4743,51 +5322,34 @@ export default function App() {
                 onSubmit={handleSaveSiteSettings}
                 className="bg-white rounded-3xl p-5 sm:p-6 border border-[#D4AF37]/40 shadow-sm space-y-5"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
-                    সাইট সেটিংস ও ব্র্যান্ডিং
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-                        d1LiveConnected
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                          : 'bg-amber-50 text-amber-800 border-amber-300'
-                      }`}
-                    >
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          d1LiveConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'
-                        }`}
-                      />
-                      <span>
-                        {d1LiveConnected
-                          ? 'Cloudflare D1 (nobo-alo-db) গ্লোবাল ডাটাবেজ সংযুক্ত'
-                          : 'D1 সিঙ্ক প্রস্তুত (Cloudflare ডিপ্লয়মেন্টে গ্লোবালি কাজ করবে)'}
-                      </span>
-                    </span>
-                    <span className="px-3 py-1 rounded-full bg-[#0A2F25]/10 text-[#0A2F25] border border-[#D4AF37]/50 text-xs font-english font-semibold">
-                      Cloudinary: {CLOUDINARY_ID} ({CLOUDINARY_FOLDER_NAME})
-                    </span>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
+                      সাইট সেটিংস ও ব্র্যান্ডিং
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      লোগো, ফেভিকন, ট্যাগলাইন এবং হোমপেজ ব্যানার এখান থেকে আপলোড ও পরিবর্তন করুন
+                    </p>
                   </div>
                 </div>
 
-                {/* Logo & Favicon Upload + Direct Link Grid */}
+                {/* Compact Upload-First Logo & Favicon Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-3">
-                    <div className="flex items-center gap-4">
-                      <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-16 h-16" />
+                  {/* Foundation Logo Card */}
+                  <div className="p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-2.5">
+                    <div className="flex items-center gap-3.5">
+                      <WhiteCircularLogo logoUrl={siteSettings.logo_url} sizeClass="w-14 h-14" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
+                        <p className="text-xs sm:text-sm font-bold text-[#0A2F25]">
                           ফাউন্ডেশন লোগো
                         </p>
                         <p className="text-[11px] text-gray-500 mb-2">
-                          আপলোড বা সরাসরি ইমেজ লিংক বসালে পুরো ওয়েবসাইটে সাথে সাথে সেট হবে
+                          সরাসরি ছবি সিলেক্ট করে আপলোড করুন
                         </p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0A2F25] text-[#F3D568] text-xs font-bold cursor-pointer hover:opacity-95 transition">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0A2F25] text-[#F3D568] text-xs font-bold cursor-pointer hover:opacity-95 transition shadow-sm">
                             <Upload className="w-3.5 h-3.5" />
-                            <span>নতুন লোগো আপলোড</span>
+                            <span>লোগো আপলোড</span>
                             <input
                               type="file"
                               accept="image/*"
@@ -4795,28 +5357,22 @@ export default function App() {
                               className="hidden"
                             />
                           </label>
-                          {siteSettings.logo_url && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = { ...siteSettings, logo_url: '' };
-                                persistSettingsInstant(next);
-                              }}
-                              className="px-2.5 py-1.5 rounded-xl bg-red-50 text-red-700 border border-red-200 text-[11px] font-bold"
-                            >
-                              রিসেট
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowSettingsLinkBox((p) => ({ ...p, logo: !p.logo }))
+                            }
+                            className="px-2.5 py-1.5 rounded-xl bg-white border border-gray-300 text-gray-600 hover:text-[#0A2F25] text-[11px] font-semibold transition"
+                          >
+                            লিংক অপশন
+                          </button>
                         </div>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                        অথবা সরাসরি লোগো ইমেজ লিংক (Cloudinary / Direct Image URL):
-                      </label>
+                    {showSettingsLinkBox.logo && (
                       <input
                         type="url"
-                        placeholder="https://res.cloudinary.com/..."
+                        placeholder="ইমেজ লিংক পেস্ট করুন (ঐচ্ছিক)"
                         value={siteSettings.logo_url || ''}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -4827,25 +5383,29 @@ export default function App() {
                             favicon_url: p.favicon_url || val
                           }));
                         }}
-                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-english focus:outline-none focus:border-[#0A2F25]"
+                        className="w-full px-3 py-1.5 rounded-xl border border-gray-300 bg-white text-xs font-english focus:outline-none focus:border-[#0A2F25]"
                       />
-                    </div>
+                    )}
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-3">
-                    <div className="flex items-center gap-4">
+                  {/* Browser Favicon Card */}
+                  <div className="p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-2.5">
+                    <div className="flex items-center gap-3.5">
                       <WhiteCircularLogo
                         logoUrl={siteSettings.favicon_url || siteSettings.logo_url}
-                        sizeClass="w-16 h-16"
+                        sizeClass="w-14 h-14"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
-                          ব্রাউজার ফেভিকন (Favicon)
+                        <p className="text-xs sm:text-sm font-bold text-[#0A2F25]">
+                          ব্রাউজার ফেভিকন
                         </p>
-                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                          <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#155e4a] text-white text-xs font-bold cursor-pointer hover:opacity-95 transition">
+                        <p className="text-[11px] text-gray-500 mb-2">
+                          ব্রাউজার ট্যাবের আইকন পরিবর্তন করুন
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#155e4a] text-white text-xs font-bold cursor-pointer hover:opacity-95 transition shadow-sm">
                             <Upload className="w-3.5 h-3.5" />
-                            <span>আলাদা ফেভিকন আপলোড</span>
+                            <span>ফেভিকন আপলোড</span>
                             <input
                               type="file"
                               accept="image/*"
@@ -4860,31 +5420,17 @@ export default function App() {
                               persistSettingsInstant(next);
                               showNotice('লোগোটিকেই ফেভিকন হিসেবে সেট করা হয়েছে!', 'success');
                             }}
-                            className="px-3 py-1.5 rounded-xl bg-white border border-[#D4AF37] text-[#0A2F25] text-[11px] font-bold hover:bg-[#D4AF37]/20 transition"
+                            className="px-2.5 py-1.5 rounded-xl bg-white border border-[#D4AF37] text-[#0A2F25] text-[11px] font-bold hover:bg-[#D4AF37]/20 transition"
                           >
                             লোগো ব্যবহার করুন
                           </button>
                         </div>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                        সরাসরি ফেভিকন ইমেজ লিংক (Direct Favicon URL):
-                      </label>
-                      <input
-                        type="url"
-                        placeholder="https://res.cloudinary.com/..."
-                        value={siteSettings.favicon_url || ''}
-                        onChange={(e) => {
-                          lastSettingsSaveRef.current = Date.now();
-                          setSiteSettings((p) => ({ ...p, favicon_url: e.target.value }));
-                        }}
-                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-english focus:outline-none focus:border-[#0A2F25]"
-                      />
-                    </div>
                   </div>
                 </div>
 
+                {/* Site Name & Tagline */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-[#0A2F25] mb-1">
@@ -4918,7 +5464,7 @@ export default function App() {
 
                 <div>
                   <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                    হিরো আর্চ ব্যাজ টেক্সট (ইসলামিক আর্কিটেকচারাল ফলক টেক্সট)
+                    উপরের স্ক্রলিং টপ বার টেক্সট
                   </label>
                   <input
                     type="text"
@@ -4931,64 +5477,41 @@ export default function App() {
                   />
                 </div>
 
-                {/* 4 Homepage Banners with File Upload + Direct URL Input */}
+                {/* Compact 4 Homepage Banner Upload Cards */}
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-2">
-                    হোমপেজ ব্যানার স্লাইডশো (৪টি স্লট — আপলোড করুন অথবা সরাসরি ইমেজ লিংক দিন)
+                    হোমপেজ ব্যানার (৪টি স্লট)
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[0, 1, 2, 3].map((slotIdx) => {
                       const currentBanner = siteSettings.banners?.[slotIdx] || '';
                       return (
                         <div
                           key={slotIdx}
-                          className="p-3.5 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-2.5"
+                          className="p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200 flex flex-col justify-between gap-2"
                         >
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-[#0A2F25]">
                               ব্যানার #{slotIdx + 1}
                             </span>
-                            <div className="flex items-center gap-1.5">
-                              <label className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#155e4a] text-white text-xs font-semibold cursor-pointer">
-                                <Upload className="w-3 h-3" />
-                                <span>আপলোড</span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => handleBannerUpload(slotIdx, e)}
-                                  className="hidden"
-                                />
-                              </label>
-                              {currentBanner && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextBanners = [...(siteSettings.banners || ['', '', '', ''])];
-                                    nextBanners[slotIdx] = '';
-                                    persistSettingsInstant({ ...siteSettings, banners: nextBanners });
-                                  }}
-                                  className="px-2 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 text-[11px] font-bold"
-                                >
-                                  মুছুন
-                                </button>
-                              )}
-                            </div>
+                            {currentBanner && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextBanners = [...(siteSettings.banners || ['', '', '', ''])];
+                                  nextBanners[slotIdx] = '';
+                                  persistSettingsInstant({ ...siteSettings, banners: nextBanners });
+                                }}
+                                className="text-red-600 hover:text-red-700 p-1"
+                                title="মুছে ফেলুন"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
-                          <input
-                            type="url"
-                            placeholder="https://res.cloudinary.com/..."
-                            value={currentBanner}
-                            onChange={(e) => {
-                              lastSettingsSaveRef.current = Date.now();
-                              const nextBanners = [...(siteSettings.banners || ['', '', '', ''])];
-                              while (nextBanners.length < 4) nextBanners.push('');
-                              nextBanners[slotIdx] = e.target.value;
-                              setSiteSettings((p) => ({ ...p, banners: nextBanners }));
-                            }}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-xs font-english focus:outline-none focus:border-[#0A2F25]"
-                          />
-                          {currentBanner && (
-                            <div className="w-full h-24 rounded-xl overflow-hidden bg-[#0A2F25] border border-[#D4AF37]/40">
+
+                          {currentBanner ? (
+                            <div className="w-full h-20 rounded-xl overflow-hidden bg-[#0A2F25] border border-[#D4AF37]/40">
                               <img
                                 key={currentBanner}
                                 src={optimizeMedia(currentBanner)}
@@ -4996,7 +5519,22 @@ export default function App() {
                                 className="w-full h-full object-cover"
                               />
                             </div>
+                          ) : (
+                            <div className="w-full h-20 rounded-xl bg-white border border-dashed border-gray-300 flex items-center justify-center text-gray-400">
+                              <ImageIcon className="w-6 h-6" />
+                            </div>
                           )}
+
+                          <label className="w-full inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#155e4a] hover:bg-[#0A2F25] text-white text-xs font-semibold cursor-pointer transition">
+                            <Upload className="w-3 h-3" />
+                            <span>{currentBanner ? 'পরিবর্তন' : 'আপলোড'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleBannerUpload(slotIdx, e)}
+                              className="hidden"
+                            />
+                          </label>
                         </div>
                       );
                     })}
@@ -5368,18 +5906,22 @@ export default function App() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#0A2F25] mb-1">পদবী / ক্যাটাগরি (Designation)</label>
-              <input
-                type="text"
-                list="member-designations-datalist"
-                value={editingMember.designation}
+              <label className="block text-xs font-bold text-[#0A2F25] mb-1">পদবি / ক্যাটাগরি নির্বাচন করুন</label>
+              <select
+                value={editingMember.designation || 'সাধারণ সদস্য'}
                 onChange={(e) =>
                   setEditingMember((prev) =>
                     prev ? { ...prev, designation: e.target.value } : null
                   )
                 }
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-sm"
-              />
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white text-sm font-semibold text-[#0A2F25]"
+              >
+                {activeDesignations.map((desig) => (
+                  <option key={desig} value={desig}>
+                    {desig}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>

@@ -1,16 +1,31 @@
 // ============================================================================
 // Cloudflare Pages D1 Backend Handler for Nobo Alo Foundation
 // Connects React frontend directly to Cloudflare D1 (nobo-alo-db: 2c75ca5d-1dc3-4904-acb6-4ca6bd5202cd)
-// Supports D1 Global Read Replication (`withSession('first-primary')`) & Safe Auto-Migrations
+// Supports Email OR Bangladeshi Mobile Number Login, Designation Management, & Edge FB OpenGraph Fetch
 // ============================================================================
 
 const SUPER_ADMIN_EMAIL = 'mohammadraihan4386.bd@gmail.com';
+const DEFAULT_DESIGNATIONS = ["সভাপতি", "সহ-সভাপতি", "সাধারণ সম্পাদক", "যুগ্ম সাধারণ সম্পাদক", "সাংগঠনিক সম্পাদক", "সহ-সাংগঠনিক সম্পাদক", "অর্থ সম্পাদক", "সহ-অর্থ সম্পাদক", "প্রচার ও প্রকাশনা সম্পাদক", "দপ্তর সম্পাদক", "সমাজকল্যাণ ও ত্রাণ সম্পাদক", "শিক্ষা ও সাংস্কৃতিক সম্পাদক", "ধর্ম বিষয়ক সম্পাদক", "তথ্য ও প্রযুক্তি সম্পাদক", "কার্যনির্বাহী সদস্য", "উপদেষ্টা", "প্রতিষ্ঠাতা সদস্য", "আজীবন সদস্য", "অ্যাডমিন", "সদস্য", "সাধারণ সদস্য"];
 
 const cleanDeadSupabaseUrl = (u?: string | null): string => {
   if (!u) return '';
   const s = String(u).trim();
   if (s.includes('xlcepfrjngtzrmpazkla.supabase.co')) return '';
   return s;
+};
+
+const bnToEnDigits = (str: string): string => {
+  const map: Record<string, string> = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+  };
+  return String(str || '').replace(/[০-৯]/g, (d) => map[d] || d);
+};
+
+const normalizeBdMobile = (raw: string): string => {
+  const ascii = bnToEnDigits(raw).replace(/[\s\-().]/g, '');
+  const m = ascii.match(/^(?:\+?88)?(01[3-9]\d{8})$/);
+  return m ? m[1] : ascii;
 };
 
 async function hashPassword(password: string): Promise<string> {
@@ -43,6 +58,7 @@ async function ensureSchema(db: any) {
       logo_url TEXT DEFAULT '',
       favicon_url TEXT DEFAULT '',
       banners TEXT DEFAULT '["","","",""]',
+      designations TEXT DEFAULT '',
       auto_approve INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`),
@@ -98,6 +114,7 @@ async function ensureSchema(db: any) {
 
   const alterStatements = [
     `ALTER TABLE site_settings ADD COLUMN favicon_url TEXT DEFAULT ''`,
+    `ALTER TABLE site_settings ADD COLUMN designations TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN promoted_by TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN fb_url TEXT DEFAULT ''`
   ];
@@ -109,7 +126,6 @@ async function ensureSchema(db: any) {
     }
   }
 
-  // Clean any legacy dead Supabase URLs stored in site_settings
   try {
     await db.prepare(`UPDATE site_settings SET logo_url = '' WHERE logo_url LIKE '%xlcepfrjngtzrmpazkla.supabase.co%'`).run();
     await db.prepare(`UPDATE site_settings SET favicon_url = '' WHERE favicon_url LIKE '%xlcepfrjngtzrmpazkla.supabase.co%'`).run();
@@ -137,9 +153,87 @@ export const onRequest = async (context: any) => {
     return jsonResponse({ ok: true });
   }
 
+  const url = new URL(request.url);
+  const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/+$/, '');
+  const method = request.method.toUpperCase();
+
+  // Edge Facebook Profile Meta & Dynamic Avatar Resolver (`GET /api/fb-profile?url=...`)
+  if (path === 'fb-profile' && method === 'GET') {
+    const targetUrl = (url.searchParams.get('url') || '').trim();
+    if (!targetUrl) {
+      return jsonResponse({ error: 'URL missing' }, 400);
+    }
+    try {
+      const fbRes = await fetch(targetUrl, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+          'Accept-Language': 'bn-BD,bn;q=0.9,en-US;q=0.8,en;q=0.7'
+        }
+      });
+      const finalUrl = fbRes.url || targetUrl;
+      const html = await fbRes.text();
+
+      const extractMeta = (prop: string): string => {
+        const r1 = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i');
+        const r2 = new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i');
+        const m = html.match(r1) || html.match(r2);
+        if (!m) return '';
+        return m[1]
+          .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+          .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+          .replace(/&amp;/g, '&')
+          .replace(/&quot;/g, '"');
+      };
+
+      let ogTitle = extractMeta('og:title') || extractMeta('twitter:title') || '';
+      ogTitle = ogTitle
+        .replace(/\s*[-|•]\s*Facebook.*$/i, '')
+        .replace(/\s*\|\s*Facebook.*$/i, '')
+        .trim();
+
+      const isGeneric =
+        !ogTitle ||
+        ogTitle.toLowerCase() === 'facebook' ||
+        ogTitle.toLowerCase().includes('log in') ||
+        ogTitle.toLowerCase().includes('লগ ইন');
+
+      let ogImage = extractMeta('og:image') || extractMeta('twitter:image') || '';
+      if (ogImage.includes('static.xx.fbcdn.net') || ogImage.includes('fb_icon_325x325')) {
+        ogImage = '';
+      }
+
+      // Extract username from final resolved URL
+      let username = '';
+      try {
+        const parsed = new URL(finalUrl);
+        const seg = parsed.pathname.split('/').filter(Boolean)[0] || '';
+        if (seg && !['profile.php', 'people', 'share', 'login'].includes(seg.toLowerCase())) {
+          username = seg;
+        } else if (parsed.searchParams.get('id')) {
+          username = parsed.searchParams.get('id') || '';
+        }
+      } catch {
+        // ignore
+      }
+
+      const dynamicAvatar = username ? `https://unavatar.io/facebook/${encodeURIComponent(username)}` : '';
+      return jsonResponse({
+        ok: true,
+        name: isGeneric ? '' : ogTitle,
+        avatar_url: ogImage || dynamicAvatar,
+        dynamic_avatar_url: dynamicAvatar,
+        resolved_url: finalUrl,
+        username
+      });
+    } catch (e: any) {
+      return jsonResponse({ ok: false, error: e?.message || 'FB fetch error' }, 200);
+    }
+  }
+
   if (!env.DB) {
     return jsonResponse(
-      { error: 'Cloudflare Pages-এ D1 Database binding (DB = nobo-alo-db) পাওয়া যায়নি। বাইন্ডিং সেট করার পর নতুন করে Redeploy করুন।' },
+      { error: 'Cloudflare Pages-এ D1 Database binding (DB = nobo-alo-db) পাওয়া যায়নি।' },
       503
     );
   }
@@ -148,9 +242,6 @@ export const onRequest = async (context: any) => {
 
   try {
     await ensureSchema(db);
-    const url = new URL(request.url);
-    const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/+$/, '');
-    const method = request.method.toUpperCase();
 
     // 1. GET /api/bootstrap
     if ((path === 'bootstrap' || path === '') && method === 'GET') {
@@ -172,6 +263,18 @@ export const onRequest = async (context: any) => {
       }
       while (parsedBanners.length < 4) parsedBanners.push('');
 
+      let parsedDesignations: string[] = DEFAULT_DESIGNATIONS;
+      try {
+        if (rawSettings.designations) {
+          const arr = JSON.parse(rawSettings.designations);
+          if (Array.isArray(arr) && arr.length > 0) {
+            parsedDesignations = arr;
+          }
+        }
+      } catch {
+        parsedDesignations = DEFAULT_DESIGNATIONS;
+      }
+
       const cleanLogo = cleanDeadSupabaseUrl(rawSettings.logo_url);
       const cleanFav = cleanDeadSupabaseUrl(rawSettings.favicon_url) || cleanLogo;
 
@@ -183,6 +286,7 @@ export const onRequest = async (context: any) => {
         logo_url: cleanLogo,
         favicon_url: cleanFav,
         banners: parsedBanners,
+        designations: parsedDesignations,
         auto_approve: Boolean(rawSettings.auto_approve)
       };
 
@@ -216,8 +320,10 @@ export const onRequest = async (context: any) => {
       const body = await request.json();
       const email = String(body.email || '').trim().toLowerCase();
       const name = String(body.name || '').trim();
-      const mobile = String(body.mobile || '').trim();
+      const mobile = normalizeBdMobile(String(body.mobile || ''));
       const password = String(body.password || '');
+      const fb_url = String(body.fb_url || '').trim();
+      const avatar_url = String(body.avatar_url || '').trim();
 
       const settingsRow = await db.prepare('SELECT auto_approve FROM site_settings WHERE id = 1').first();
       const isSuper = email === SUPER_ADMIN_EMAIL.toLowerCase();
@@ -230,11 +336,16 @@ export const onRequest = async (context: any) => {
 
       await db
         .prepare(
-          `INSERT INTO users (id, name, email, mobile, password_hash, avatar_url, role, status, designation, sort_order)
-           VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?)
-           ON CONFLICT(email) DO UPDATE SET name=excluded.name, mobile=excluded.mobile, password_hash=excluded.password_hash`
+          `INSERT INTO users (id, name, email, mobile, password_hash, avatar_url, role, status, designation, sort_order, fb_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(email) DO UPDATE SET
+             name=excluded.name,
+             mobile=excluded.mobile,
+             password_hash=excluded.password_hash,
+             fb_url=COALESCE(NULLIF(excluded.fb_url, ''), users.fb_url),
+             avatar_url=COALESCE(NULLIF(excluded.avatar_url, ''), users.avatar_url)`
         )
-        .bind(id, name, email, mobile, pwHash, role, status, designation, sort_order)
+        .bind(id, name, email, mobile, pwHash, avatar_url, role, status, designation, sort_order, fb_url)
         .run();
 
       const user = await db
@@ -245,15 +356,25 @@ export const onRequest = async (context: any) => {
       return jsonResponse({ user, ok: true });
     }
 
-    // 3. POST /api/login (or /api/auth/login)
+    // 3. POST /api/login (or /api/auth/login) — Supports Email OR Bangladeshi Mobile Number!
     if ((path === 'login' || path === 'auth/login') && method === 'POST') {
       const body = await request.json();
-      const email = String(body.email || '').trim().toLowerCase();
+      const rawIdentifier = String(body.identifier || body.email || '').trim();
+      const cleanEmail = rawIdentifier.toLowerCase();
+      const normalizedPhone = normalizeBdMobile(rawIdentifier);
       const password = String(body.password || '');
       const pwHash = await hashPassword(password);
-      const isSuper = email === SUPER_ADMIN_EMAIL.toLowerCase();
+      const isSuper = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
 
-      let user = await db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').bind(email).first();
+      let user = await db
+        .prepare(
+          `SELECT * FROM users
+           WHERE LOWER(email) = ?
+              OR ( ? != '' AND (mobile = ? OR REPLACE(REPLACE(mobile, '+88', ''), '-', '') = ?) )
+           LIMIT 1`
+        )
+        .bind(cleanEmail, normalizedPhone, normalizedPhone, normalizedPhone)
+        .first();
 
       if (!user && isSuper) {
         const id = 'super-admin-raihan';
@@ -262,24 +383,28 @@ export const onRequest = async (context: any) => {
             `INSERT INTO users (id, name, email, mobile, password_hash, avatar_url, role, status, designation, sort_order)
              VALUES (?, 'মোহাম্মদ রায়হান', ?, '', ?, '', 'admin', 'approved', 'অ্যাডমিন', 1)`
           )
-          .bind(id, email, pwHash)
+          .bind(id, cleanEmail, pwHash)
           .run();
         user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
       }
 
-      const isDefaultSuperPw = isSuper && ['NoboAlo@2026', 'noboalo2026', '123456'].includes(password.trim());
+      const isDefaultSuperPw =
+        (isSuper || (user && String(user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase())) &&
+        ['NoboAlo@2026', 'noboalo2026', '123456'].includes(password.trim());
+
       if (!user || (user.password_hash && user.password_hash !== pwHash && !isDefaultSuperPw)) {
-        return jsonResponse({ error: 'ইমেইল বা পাসওয়ার্ড সঠিক নয়।' }, 401);
+        return jsonResponse({ error: 'ইমেইল/মোবাইল নাম্বার অথবা পাসওয়ার্ড সঠিক নয়।' }, 401);
       }
 
-      if (isSuper && (user.role !== 'admin' || user.status !== 'approved')) {
+      const userIsSuper = String(user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+      if (userIsSuper && (user.role !== 'admin' || user.status !== 'approved')) {
         await db.prepare("UPDATE users SET role = 'admin', status = 'approved' WHERE id = ?").bind(user.id).run();
         user.role = 'admin';
         user.status = 'approved';
       }
 
-      if (user.status === 'pending' && !isSuper) {
-        return jsonResponse({ error: 'একাউন্টটি এখনো অ্যাপ্রুভ হয়নি।', pending: true }, 403);
+      if (user.status === 'pending' && !userIsSuper) {
+        return jsonResponse({ error: 'একাউন্টটি এখনো অ্যাপ্রুভ হয়নি। অ্যাডমিনের অনুমোদনের জন্য অপেক্ষা করুন।', pending: true }, 403);
       }
 
       const { password_hash, ...safeUser } = user;
@@ -294,11 +419,14 @@ export const onRequest = async (context: any) => {
       const cleanBanners = Array.isArray(body.banners)
         ? JSON.stringify(body.banners.map((b: string) => cleanDeadSupabaseUrl(b)))
         : null;
+      const cleanDesignations = Array.isArray(body.designations)
+        ? JSON.stringify(body.designations)
+        : null;
 
       await db
         .prepare(
-          `INSERT INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, auto_approve, updated_at)
-           VALUES (1, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `INSERT INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, designations, auto_approve, updated_at)
+           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(id) DO UPDATE SET
              site_name = COALESCE(excluded.site_name, site_settings.site_name),
              tagline = COALESCE(excluded.tagline, site_settings.tagline),
@@ -306,6 +434,7 @@ export const onRequest = async (context: any) => {
              logo_url = COALESCE(excluded.logo_url, site_settings.logo_url),
              favicon_url = COALESCE(excluded.favicon_url, site_settings.favicon_url),
              banners = COALESCE(excluded.banners, site_settings.banners),
+             designations = COALESCE(excluded.designations, site_settings.designations),
              auto_approve = COALESCE(excluded.auto_approve, site_settings.auto_approve),
              updated_at = CURRENT_TIMESTAMP`
         )
@@ -316,6 +445,7 @@ export const onRequest = async (context: any) => {
           cleanLogo,
           cleanFav,
           cleanBanners,
+          cleanDesignations,
           typeof body.auto_approve === 'boolean' ? (body.auto_approve ? 1 : 0) : null
         )
         .run();
@@ -328,7 +458,7 @@ export const onRequest = async (context: any) => {
       const id = body.id || crypto.randomUUID();
       const email = String(body.email || `${id}@noboalo.org`).trim().toLowerCase();
       const name = String(body.name || 'সদস্য').trim();
-      const mobile = String(body.mobile || '').trim();
+      const mobile = normalizeBdMobile(String(body.mobile || ''));
       const avatar_url = String(body.avatar_url || '').trim();
       const role = body.role === 'admin' ? 'admin' : 'member';
       const status = body.status || 'approved';
@@ -343,6 +473,7 @@ export const onRequest = async (context: any) => {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              name = excluded.name,
+             mobile = COALESCE(NULLIF(excluded.mobile, ''), users.mobile),
              avatar_url = excluded.avatar_url,
              role = excluded.role,
              status = excluded.status,
@@ -360,6 +491,7 @@ export const onRequest = async (context: any) => {
     if (path === 'members' && method === 'PUT') {
       const body = await request.json();
       const pwHash = body.new_password ? await hashPassword(body.new_password) : null;
+      const cleanMobile = body.mobile !== undefined ? normalizeBdMobile(String(body.mobile)) : null;
 
       const existing = await db
         .prepare('SELECT id FROM users WHERE id = ? OR ( ? IS NOT NULL AND LOWER(email) = LOWER(?) )')
@@ -370,12 +502,13 @@ export const onRequest = async (context: any) => {
         await db
           .prepare(
             `INSERT INTO users (id, name, email, mobile, password_hash, avatar_url, role, status, designation, sort_order, promoted_by, fb_url)
-             VALUES (?, ?, ?, '', ?, ?, ?, 'approved', ?, ?, ?, ?)`
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?)`
           )
           .bind(
             body.id || crypto.randomUUID(),
             body.name || 'অ্যাডমিন',
             String(body.email).toLowerCase(),
+            cleanMobile || '',
             pwHash || '',
             body.avatar_url || '',
             body.role || 'admin',
@@ -393,6 +526,7 @@ export const onRequest = async (context: any) => {
         .prepare(
           `UPDATE users
            SET name = COALESCE(?, name),
+               mobile = COALESCE(?, mobile),
                avatar_url = COALESCE(?, avatar_url),
                role = COALESCE(?, role),
                status = COALESCE(?, status),
@@ -405,6 +539,7 @@ export const onRequest = async (context: any) => {
         )
         .bind(
           body.name ?? null,
+          cleanMobile,
           body.avatar_url ?? null,
           body.role ?? null,
           body.status ?? null,
