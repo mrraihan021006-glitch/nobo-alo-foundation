@@ -1824,10 +1824,10 @@ export default function App() {
   const [savingOnboarding, setSavingOnboarding] = useState(false);
 
   const ONBOARDING_MESSAGES = [
-    'আপনার রক্তের গ্রুপ ও বয়স কী? জরুরি মুহূর্তে জীবন বাঁচাতে এখনই সিলেক্ট করুন।',
-    'নব আলো ফাউন্ডেশনের সদস্য প্রোফাইল সম্পূর্ণ করতে আপনার রক্তের গ্রুপ ও বয়স যুক্ত করুন।',
-    'এক ফোঁটা রক্ত বাঁচাতে পারে একটি প্রাণ—অনুগ্রহ করে আপনার রক্তের গ্রুপ নির্বাচন করুন।',
-    'জরুরি রক্তদাতা তালিকায় যুক্ত হতে আপনার রক্তের গ্রুপ ও বয়স নির্বাচন করুন।'
+    'আপনার রক্তের গ্রুপ কী? জরুরি মুহূর্তে জীবন বাঁচাতে রক্তের গ্রুপ ও জন্মতারিখ সিলেক্ট করুন।',
+    'নব আলো ফাউন্ডেশনের সদস্য প্রোফাইল সম্পূর্ণ করতে আপনার রক্তের গ্রুপ ও জন্মতারিখ যুক্ত করুন।',
+    'এক ফোঁটা রক্ত বাঁচাতে পারে একটি প্রাণ—আপনার রক্তের গ্রুপ কোনটি নির্বাচন করুন।',
+    'জরুরি রক্তদাতা তালিকায় যুক্ত হতে আপনার রক্তের গ্রুপ ও যোগাযোগের নাম্বার (ঐচ্ছিক) দিন।'
   ];
 
   const requestBrowserNotificationAccess = async () => {
@@ -1896,7 +1896,7 @@ export default function App() {
       return;
     }
     if (!onboardingAge.trim()) {
-      showNotice('অনুগ্রহ করে আপনার বয়স লিখুন।', 'error');
+      showNotice('অনুগ্রহ করে আপনার জন্মতারিখ নির্বাচন করুন।', 'error');
       return;
     }
     let cleanMob = appUser.mobile || '';
@@ -1928,7 +1928,7 @@ export default function App() {
       mobile: updated.mobile
     });
     setSavingOnboarding(false);
-    showNotice('ধন্যবাদ! আপনার রক্তের গ্রুপ ও বয়স সফলভাবে যুক্ত হয়েছে।', 'success');
+    showNotice('ধন্যবাদ! আপনার রক্তের গ্রুপ ও তথ্য সফলভাবে সংরক্ষিত হয়েছে।', 'success');
   };
 
   // Continue with Google Handler (Uses Official Google Identity Services OAuth2 Popup)
@@ -3705,9 +3705,9 @@ export default function App() {
             </div>
           </button>
 
-          {/* Right Side Compact Navigation Buttons */}
+          {/* Right Side Compact Navigation Buttons (Only Active View Turns Golden!) */}
           <nav className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-            {/* Members Button: Icon-Only on Mobile when Logged In so Site Title never breaks */}
+            {/* Members Button */}
             <button
               type="button"
               onClick={() => {
@@ -3717,14 +3717,14 @@ export default function App() {
               aria-label="সদস্যবৃন্দ"
               title="সদস্যবৃন্দ"
               className={`inline-flex items-center justify-center gap-1.5 ${
-                appUser ? 'w-9 h-9 sm:w-auto sm:px-4 sm:py-2' : 'px-3.5 sm:px-4 py-2'
-              } rounded-full text-xs sm:text-sm font-semibold transition-all border whitespace-nowrap shrink-0 ${
+                appUser ? 'w-9 h-9 sm:w-auto sm:px-4 sm:py-2' : 'px-3.5 sm:px-4 py-1.5 sm:py-2'
+              } rounded-full text-xs sm:text-sm font-bold transition-all border whitespace-nowrap shrink-0 ${
                 currentView === 'members'
-                  ? 'bg-[#D4AF37] text-[#0A2F25] border-[#F3D568] shadow-md'
-                  : 'bg-[#124A3B]/90 text-white border-[#D4AF37]/40 hover:border-[#D4AF37] hover:bg-[#155e4a]'
+                  ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] shadow-md'
+                  : 'bg-white/10 text-white border-white/20 hover:border-[#D4AF37]/60 hover:bg-white/15'
               }`}
             >
-              <Users className="w-4 h-4 text-[#F3D568] shrink-0" />
+              <Users className={`w-4 h-4 shrink-0 ${currentView === 'members' ? 'text-[#0A2F25]' : 'text-[#F3D568]'}`} />
               <span className={appUser ? 'hidden sm:inline' : 'inline'}>সদস্য</span>
             </button>
 
@@ -3733,10 +3733,12 @@ export default function App() {
                 type="button"
                 onClick={() => setCurrentView('join')}
                 aria-label="যুক্ত হোন"
-                className={`inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all shadow-md border whitespace-nowrap shrink-0 ${
+                className={`inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all border whitespace-nowrap shrink-0 ${
                   currentView === 'join' || currentView === 'login'
-                    ? 'bg-[#F3D568] text-[#0A2F25] border-white'
-                    : 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] hover:brightness-105'
+                    ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] shadow-md'
+                    : currentView === 'home'
+                    ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] shadow-sm hover:brightness-105'
+                    : 'bg-white/10 text-white border-white/20 hover:border-[#D4AF37]/60 hover:bg-white/15'
                 }`}
               >
                 <UserPlus className="w-4 h-4 shrink-0" />
@@ -3744,7 +3746,7 @@ export default function App() {
               </button>
             ) : (
               <>
-                {/* Dashboard Button: Compact Circular Icon on Mobile, Pill with Text on Desktop */}
+                {/* Dashboard Button: Only Golden when currentView === 'dashboard', Glassmorphic otherwise */}
                 <button
                   type="button"
                   onClick={() => {
@@ -3753,13 +3755,13 @@ export default function App() {
                   }}
                   aria-label="ড্যাশবোর্ড"
                   title="ড্যাশবোর্ড"
-                  className={`inline-flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all shadow-md border whitespace-nowrap shrink-0 ${
+                  className={`inline-flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all border whitespace-nowrap shrink-0 ${
                     currentView === 'dashboard'
-                      ? 'bg-[#F3D568] text-[#0A2F25] border-white'
-                      : 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] hover:brightness-105'
+                      ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] shadow-md'
+                      : 'bg-white/10 text-white border-white/20 hover:border-[#D4AF37]/60 hover:bg-white/15'
                   }`}
                 >
-                  <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  <LayoutDashboard className={`w-4 h-4 shrink-0 ${currentView === 'dashboard' ? 'text-[#0A2F25]' : 'text-[#F3D568]'}`} />
                   <span className="hidden sm:inline">ড্যাশবোর্ড</span>
                 </button>
 
@@ -3828,11 +3830,7 @@ export default function App() {
                                   {appUser.blood_group}
                                 </span>
                               )}
-                              {appUser.age && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/15 text-[#F3D568] whitespace-nowrap">
-                                  বয়স: {appUser.age}
-                                </span>
-                              )}
+
                             </div>
                           </div>
                         </div>
@@ -3958,14 +3956,14 @@ export default function App() {
         {/* ================================================================== */}
         {currentView === 'home' && (
           <div>
-            {/* A. CLEAN LUXURY EMERALD & GOLD HERO SECTION (PURE SVG, ZERO EMOJIS/MOSQUE SHAPES) */}
-            <section className="relative overflow-hidden bg-[#0A2F25] text-white min-h-[470px] sm:min-h-[540px] flex flex-col items-center justify-center py-14 sm:py-20 px-4 border-b-4 border-[#D4AF37]">
-              {/* Fading Background Banner Slideshow */}
+            {/* A. COMPACT MOBILE-FIRST HERO SECTION (TINY SUBTLE MANDALAS & VIVID BANNER SHOWCASE) */}
+            <section className="relative overflow-hidden bg-[#0A2F25] text-white min-h-[260px] sm:min-h-[420px] flex flex-col items-center justify-center py-6 sm:py-14 px-3 sm:px-6 border-b-2 border-[#D4AF37]">
+              {/* Vivid Fading Background Banner Slideshow */}
               {validBanners.map((bannerUrl, idx) => (
                 <div
                   key={idx}
                   className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                    idx === bannerIndex ? 'opacity-45' : 'opacity-0'
+                    idx === bannerIndex ? 'opacity-65' : 'opacity-0'
                   }`}
                   style={{
                     backgroundImage: `url("${optimizeMedia(bannerUrl)}")`,
@@ -3975,72 +3973,72 @@ export default function App() {
                 />
               ))}
 
-              {/* Deep Emerald Sanctuary Vignette & Soft Golden Radial Aura */}
+              {/* Balanced Translucent Overlay so Background Banner Shines Clearly */}
               <div
                 className="absolute inset-0"
                 style={{
                   background:
-                    'radial-gradient(circle at 50% 42%, rgba(21,94,74,0.65) 0%, rgba(10,47,37,0.92) 70%, rgba(5,24,19,0.98) 100%)'
+                    validBanners.length > 0
+                      ? 'radial-gradient(circle at 50% 45%, rgba(10,47,37,0.48) 0%, rgba(10,47,37,0.76) 72%, rgba(5,24,19,0.88) 100%)'
+                      : 'radial-gradient(circle at 50% 42%, rgba(21,94,74,0.65) 0%, rgba(10,47,37,0.92) 70%, rgba(5,24,19,0.98) 100%)'
                 }}
               />
 
-              {/* Subtle Corner Rotating SVG Geometric Rosettes */}
-              <div className="absolute -left-28 -top-28 opacity-35">
-                <IslamicMandala className="animate-mandala" size={400} />
+              {/* Small, Subtle Corner Mandalas (110px on Mobile so they never crowd the Banner!) */}
+              <div className="absolute -left-8 -top-8 opacity-15 pointer-events-none">
+                <IslamicMandala className="animate-mandala" size={120} />
               </div>
-              <div className="absolute -right-28 -bottom-28 opacity-35">
-                <IslamicMandala className="animate-mandala-reverse" size={440} />
+              <div className="absolute -right-8 -bottom-8 opacity-15 pointer-events-none">
+                <IslamicMandala className="animate-mandala-reverse" size={130} />
               </div>
 
-              {/* Hero Center Content */}
-              <div className="relative z-10 max-w-3xl mx-auto text-center flex flex-col items-center">
-                {/* Floating Circular White-BG Logo with Soft Golden Halo */}
-                <div className="relative mb-5 flex items-center justify-center">
-                  <div className="absolute -inset-2.5 rounded-full bg-gradient-to-tr from-[#D4AF37]/30 via-[#F3D568]/20 to-[#D4AF37]/30 blur-md" />
-                  <div className="relative p-1.5 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-[0_0_40px_rgba(212,175,55,0.45)]">
+              {/* Compact Hero Center Content */}
+              <div className="relative z-10 max-w-2xl mx-auto text-center flex flex-col items-center">
+                {/* Compact Circular Logo */}
+                <div className="relative mb-2.5 sm:mb-4 flex items-center justify-center">
+                  <div className="relative p-1 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-[0_0_25px_rgba(212,175,55,0.4)]">
                     <WhiteCircularLogo
                       logoUrl={siteSettings.logo_url}
-                      sizeClass="w-20 h-20 sm:w-24 sm:h-24"
+                      sizeClass="w-14 h-14 sm:w-20 sm:h-20"
                     />
                   </div>
                 </div>
 
-                {/* Golden Filigree Pill Badge (100% Pure SVG Icons) */}
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-[#D4AF37]/55 text-[#F3D568] text-xs sm:text-sm font-semibold mb-4 shadow-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+                {/* Compact Golden Filigree Pill Badge */}
+                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 sm:px-4 sm:py-1 rounded-full bg-black/25 backdrop-blur-md border border-[#D4AF37]/50 text-[#F3D568] text-[10px] sm:text-xs font-semibold mb-2 sm:mb-3">
+                  <Sparkles className="w-3 h-3 text-[#D4AF37] shrink-0" />
                   <span>মানবতা, ভ্রাতৃত্ব ও কল্যাণের অঙ্গীকার</span>
-                  <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
                 </div>
 
-                <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white leading-snug sm:leading-tight mb-4 drop-shadow-lg">
+                <h1 className="text-lg sm:text-3xl md:text-4xl font-bold text-white leading-snug mb-1.5 sm:mb-3 drop-shadow-md">
                   মানবতার সেবায় {siteSettings.site_name || DEFAULT_SITE_NAME}
                 </h1>
 
-                <p className="text-sm sm:text-lg md:text-xl text-gray-200 max-w-2xl mb-8 leading-relaxed">
+                <p className="text-xs sm:text-base text-gray-100 max-w-xl mb-4 sm:mb-6 leading-relaxed drop-shadow">
                   {siteSettings.tagline || DEFAULT_TAGLINE}
                 </p>
 
-                <div className="flex flex-wrap items-center justify-center gap-3.5">
+                <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3.5">
                   <button
                     type="button"
                     onClick={() => setCurrentView('join')}
-                    className="btn-glossy-gold inline-flex items-center gap-2 px-7 sm:px-9 py-3.5 rounded-full bg-gradient-to-r from-[#D4AF37] via-[#F3D568] to-[#D4AF37] text-[#0A2F25] font-bold text-sm sm:text-base shadow-[0_10px_25px_rgba(212,175,55,0.4)] hover:scale-[1.03] active:scale-95 transition-all"
+                    className="btn-glossy-gold inline-flex items-center gap-1.5 px-5 py-2 sm:px-7 sm:py-3 rounded-full bg-gradient-to-r from-[#D4AF37] via-[#F3D568] to-[#D4AF37] text-[#0A2F25] font-bold text-xs sm:text-sm shadow-lg hover:scale-[1.02] active:scale-95 transition-all whitespace-nowrap"
                   >
-                    <UserPlus className="w-5 h-5" />
+                    <UserPlus className="w-4 h-4 shrink-0" />
                     <span>সদস্য হিসেবে যুক্ত হোন</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setCurrentView('members')}
-                    className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-[#D4AF37]/60 font-semibold text-sm sm:text-base transition-all"
+                    className="inline-flex items-center gap-1.5 px-5 py-2 sm:px-6 sm:py-3 rounded-full bg-black/30 hover:bg-black/45 backdrop-blur-md text-white border border-[#D4AF37]/60 font-semibold text-xs sm:text-sm transition-all whitespace-nowrap"
                   >
-                    <Users className="w-4 h-4 text-[#F3D568]" />
+                    <Users className="w-3.5 h-3.5 text-[#F3D568] shrink-0" />
                     <span>সদস্যবৃন্দ দেখুন</span>
                   </button>
                 </div>
 
                 {validBanners.length > 1 && (
-                  <div className="mt-7 flex items-center gap-2">
+                  <div className="mt-4 sm:mt-6 flex items-center gap-1.5">
                     {validBanners.map((_, i) => (
                       <button
                         key={i}
@@ -4048,7 +4046,7 @@ export default function App() {
                         onClick={() => setBannerIndex(i)}
                         aria-label={`ব্যানার ${i + 1}`}
                         className={`h-1.5 rounded-full transition-all ${
-                          i === bannerIndex ? 'w-7 bg-[#D4AF37]' : 'w-2 bg-white/35'
+                          i === bannerIndex ? 'w-6 bg-[#D4AF37]' : 'w-1.5 bg-white/40'
                         }`}
                       />
                     ))}
@@ -4276,11 +4274,11 @@ export default function App() {
             {/* D. SHARE YOUR IDEA SECTION (`আপনার পরিকল্পনা শেয়ার করুন`) */}
             <section className="relative overflow-hidden bg-gradient-to-br from-[#0A2F25] via-[#124A3B] to-[#0A2F25] text-white py-14 sm:py-20 px-4 border-t-2 border-[#D4AF37]/60">
               {/* Animated Islamic Mandalas in Idea Section Background */}
-              <div className="absolute -right-24 -top-24 opacity-35">
-                <IslamicMandala className="animate-mandala" size={360} />
+              <div className="absolute -right-8 -top-8 opacity-15 pointer-events-none">
+                <IslamicMandala className="animate-mandala" size={120} />
               </div>
-              <div className="absolute -left-24 -bottom-24 opacity-35">
-                <IslamicMandala className="animate-mandala-reverse" size={360} />
+              <div className="absolute -left-8 -bottom-8 opacity-15 pointer-events-none">
+                <IslamicMandala className="animate-mandala-reverse" size={120} />
               </div>
 
               <div className="relative z-10 max-w-2xl mx-auto">
@@ -4377,7 +4375,7 @@ export default function App() {
                 </div>
 
                 {/* Compact Blood Group Pills */}
-                <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto pb-0.5 sm:pb-0 no-scrollbar">
+                <div className="flex flex-wrap items-center justify-center sm:justify-end gap-1 w-full sm:w-auto">
                   <span className="text-[11px] font-bold text-gray-500 mr-1 shrink-0">রক্তের গ্রুপ:</span>
                   {['সব', ...BLOOD_GROUPS].map((bg) => (
                     <button
@@ -4458,10 +4456,7 @@ export default function App() {
                             </span>
                           </div>
 
-                          <span className="mt-2.5 inline-flex items-center gap-0.5 text-[10px] sm:text-[11px] font-bold text-[#155e4a]">
-                            <span>বিস্তারিত</span>
-                            <ChevronRight className="w-3 h-3" />
-                          </span>
+
                         </div>
                       </div>
                     );
@@ -4497,7 +4492,7 @@ export default function App() {
                   className="w-full py-2.5 px-4 rounded-full bg-white hover:bg-gray-50 text-[#0A2F25] border-2 border-gray-200 hover:border-[#D4AF37] font-bold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all active:scale-95"
                 >
                   <GoogleBrandIcon className="w-5 h-5 shrink-0" />
-                  <span>Continue with Google (গুগল দিয়ে চালিয়ে যান)</span>
+                  <span className="font-english">Continue with Google</span>
                 </button>
 
                 <div className="relative flex py-1 items-center">
@@ -4647,7 +4642,7 @@ export default function App() {
                   className="w-full py-2.5 px-4 rounded-full bg-white hover:bg-gray-50 text-[#0A2F25] border-2 border-gray-200 hover:border-[#D4AF37] font-bold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all active:scale-95"
                 >
                   <GoogleBrandIcon className="w-5 h-5 shrink-0" />
-                  <span>Continue with Google (গুগল দিয়ে চালিয়ে যান)</span>
+                  <span className="font-english">Continue with Google</span>
                 </button>
 
                 <div className="relative flex py-1 items-center">
@@ -4785,7 +4780,7 @@ export default function App() {
 
             {/* DASHBOARD NAVIGATION TABS */}
             {appUser.role === 'admin' ? (
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 no-scrollbar">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 mb-5">
                 {[
                   { id: 'overview', label: 'ওভারভিউ', icon: LayoutDashboard },
                   { id: 'members', label: 'সদস্য পরিচালনা', icon: Users },
@@ -4803,7 +4798,7 @@ export default function App() {
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveTab(tab.id)}
-                      className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all border shrink-0 ${
+                      className={`inline-flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap transition-all border ${
                         active
                           ? 'bg-[#0A2F25] text-[#F3D568] border-[#D4AF37] shadow-md'
                           : 'bg-white text-[#0A2F25] border-gray-200 hover:border-[#D4AF37]'
@@ -4821,7 +4816,7 @@ export default function App() {
                 })}
               </div>
             ) : (
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 no-scrollbar">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 mb-5">
                 {[
                   { id: 'my_account', label: 'আমার জমা', icon: Wallet },
                   { id: 'my_profile', label: 'প্রোফাইল আপডেট', icon: User },
@@ -4835,7 +4830,7 @@ export default function App() {
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveTab(tab.id)}
-                      className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all border shrink-0 ${
+                      className={`inline-flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap transition-all border ${
                         active
                           ? 'bg-[#0A2F25] text-[#F3D568] border-[#D4AF37] shadow-md'
                           : 'bg-white text-[#0A2F25] border-gray-200 hover:border-[#D4AF37]'
@@ -5009,7 +5004,7 @@ export default function App() {
                             className="px-3 py-1 rounded-full bg-[#D4AF37]/20 text-[#0A2F25] border border-[#D4AF37]/50 text-xs font-bold hover:bg-[#D4AF37]/30 transition"
                           >
                             {showAllDesignations
-                              ? 'কম দেখুন (See Less)'
+                              ? 'সংক্ষিপ্ত করুন'
                               : `আরও দেখুন (+${activeDesignations.length - 6}টি)`}
                           </button>
                         )}
@@ -5093,124 +5088,126 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Approved Members Table */}
-                <div className="bg-white rounded-3xl p-4 sm:p-6 border border-[#D4AF37]/40 shadow-sm overflow-hidden">
-                  <h3 className="text-base sm:text-lg font-bold text-[#0A2F25] mb-4">
+                {/* Approved Members List (100% Mobile-Responsive Card Rows, Zero Horizontal Scroll) */}
+                <div className="bg-white rounded-3xl p-4 sm:p-6 border border-[#D4AF37]/40 shadow-sm">
+                  <h3 className="text-base sm:text-lg font-bold text-[#0A2F25] mb-3.5">
                     অনুমোদিত সদস্য তালিকা ({approvedMembers.length})
                   </h3>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[600px]">
-                      <thead>
-                        <tr className="border-b border-gray-200 text-xs font-bold text-gray-600 bg-[#F4F7F5]">
-                          <th className="py-3 px-3 rounded-tl-xl">সদস্য</th>
-                          <th className="py-3 px-3">পদবী</th>
-                          <th className="py-3 px-3">ক্রমিক</th>
-                          <th className="py-3 px-3">রোল</th>
-                          <th className="py-3 px-3 text-right rounded-tr-xl">অ্যাকশন</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100 text-xs sm:text-sm">
-                        {approvedMembers.map((m) => {
-                          const isSuper =
-                            m.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
-                          const canManage = canActorManageMember(appUser, m);
-                          return (
-                            <tr key={m.id} className="hover:bg-gray-50/80">
-                              <td className="py-3 px-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-9 h-9 rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center font-bold overflow-hidden shrink-0">
-                                    {m.avatar_url ? (
-                                      <img
-                                        src={optimizeMedia(m.avatar_url)}
-                                        alt={m.name}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    ) : (
-                                      m.name.charAt(0)
-                                    )}
-                                  </div>
-                                  <div>
-                                    <p className="font-bold text-[#0A2F25]">{m.name}</p>
-                                    <p className="text-[11px] text-gray-500 font-english">{m.email}</p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-3 px-3 font-medium">
-                                <select
-                                  value={m.designation || (m.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')}
-                                  onChange={(e) => handleDesignationChange(m, e.target.value)}
-                                  className="px-2.5 py-1.5 rounded-xl border border-[#D4AF37]/50 bg-[#F4F7F5] hover:bg-white text-xs font-bold text-[#0A2F25] focus:outline-none focus:border-[#0A2F25] transition cursor-pointer"
-                                >
-                                  {!activeDesignations.includes(
-                                    m.designation || (m.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')
-                                  ) && (
-                                    <option value={m.designation}>
-                                      {m.designation}
-                                    </option>
-                                  )}
-                                  {activeDesignations.map((desig) => (
-                                    <option key={desig} value={desig}>
-                                      {desig}
-                                    </option>
-                                  ))}
-                                </select>
-                              </td>
-                              <td className="py-3 px-3 font-english">{m.sort_order ?? 100}</td>
-                              <td className="py-3 px-3">
-                                {isSuper ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0A2F25] text-[#F3D568] text-xs font-bold">
-                                    <ShieldCheck className="w-3.5 h-3.5" />
-                                    <span>সুপার অ্যাডমিন</span>
+                  <div className="space-y-2.5">
+                    {approvedMembers.map((m) => {
+                      const isSuper =
+                        m.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+                      const canManage = canActorManageMember(appUser, m);
+                      const dispEmail = formatDisplayEmail(m.email);
+
+                      return (
+                        <div
+                          key={m.id}
+                          className="p-3 sm:p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                          {/* Top / Left: Avatar + Name + Contact/Blood Badge */}
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-10 h-10 rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center font-bold overflow-hidden shrink-0 border border-[#D4AF37]">
+                              {m.avatar_url ? (
+                                <img
+                                  src={optimizeMedia(m.avatar_url)}
+                                  alt={m.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                m.name.charAt(0)
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <p className="font-bold text-sm text-[#0A2F25] truncate">{m.name}</p>
+                                {m.blood_group && (
+                                  <span className="px-2 py-0.2 rounded-full bg-red-600 text-white font-english font-bold text-[10px]">
+                                    {m.blood_group}
                                   </span>
-                                ) : !canManage ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#155e4a]/15 text-[#0A2F25] border border-[#D4AF37]/50 text-xs font-bold">
-                                    <ShieldCheck className="w-3.5 h-3.5 text-[#155e4a]" />
-                                    <span>{m.role === 'admin' ? 'সিনিয়র অ্যাডমিন (সুরক্ষিত)' : 'সদস্য'}</span>
-                                  </span>
-                                ) : (
-                                  <select
-                                    value={m.role}
-                                    onChange={(e) =>
-                                      handleRoleChange(
-                                        m,
-                                        e.target.value === 'admin' ? 'admin' : 'member'
-                                      )
-                                    }
-                                    className="px-2.5 py-1 rounded-xl border border-gray-300 bg-white text-xs font-semibold focus:outline-none focus:border-[#0A2F25]"
-                                  >
-                                    <option value="member">member</option>
-                                    <option value="admin">admin</option>
-                                  </select>
                                 )}
-                              </td>
-                              <td className="py-3 px-3 text-right">
-                                <div className="inline-flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingMember({ ...m })}
-                                    className="p-2 rounded-xl bg-[#0A2F25]/10 hover:bg-[#0A2F25] text-[#0A2F25] hover:text-[#F3D568] transition"
-                                    title="সম্পাদনা"
-                                  >
-                                    <Edit3 className="w-4 h-4" />
-                                  </button>
-                                  {canManage && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteMember(m)}
-                                      className="p-2 rounded-xl bg-red-50 hover:bg-red-600 text-red-600 hover:text-white transition"
-                                      title="ডিলিট"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                <span className="px-2 py-0.2 rounded-full bg-white border border-gray-200 text-gray-600 font-english text-[10px]">
+                                  #{m.sort_order ?? 100}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-gray-500 font-english truncate">
+                                {m.mobile || dispEmail || 'সদস্য'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Bottom / Right Controls: Designation Select + Role Select + Edit/Delete */}
+                          <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-200/80">
+                            <select
+                              value={m.designation || (m.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')}
+                              onChange={(e) => handleDesignationChange(m, e.target.value)}
+                              className="px-3 py-1.5 rounded-full border border-[#D4AF37]/50 bg-white text-xs font-bold text-[#0A2F25] focus:outline-none focus:border-[#0A2F25]"
+                            >
+                              {!activeDesignations.includes(
+                                m.designation || (m.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')
+                              ) && (
+                                <option value={m.designation}>
+                                  {m.designation}
+                                </option>
+                              )}
+                              {activeDesignations.map((desig) => (
+                                <option key={desig} value={desig}>
+                                  {desig}
+                                </option>
+                              ))}
+                            </select>
+
+                            {isSuper ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0A2F25] text-[#F3D568] text-[11px] font-bold whitespace-nowrap">
+                                <ShieldCheck className="w-3 h-3" />
+                                <span>সুপার অ্যাডমিন</span>
+                              </span>
+                            ) : !canManage ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#155e4a]/15 text-[#0A2F25] border border-[#D4AF37]/50 text-[11px] font-bold whitespace-nowrap">
+                                <ShieldCheck className="w-3 h-3 text-[#155e4a]" />
+                                <span>{m.role === 'admin' ? 'সিনিয়র অ্যাডমিন' : 'সদস্য'}</span>
+                              </span>
+                            ) : (
+                              <select
+                                value={m.role}
+                                onChange={(e) =>
+                                  handleRoleChange(
+                                    m,
+                                    e.target.value === 'admin' ? 'admin' : 'member'
+                                  )
+                                }
+                                className="px-2.5 py-1.5 rounded-full border border-gray-300 bg-white text-xs font-semibold focus:outline-none focus:border-[#0A2F25]"
+                              >
+                                <option value="member">সদস্য</option>
+                                <option value="admin">অ্যাডমিন</option>
+                              </select>
+                            )}
+
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditingMember({ ...m })}
+                                className="p-2 rounded-full bg-[#0A2F25]/10 hover:bg-[#0A2F25] text-[#0A2F25] hover:text-[#F3D568] transition"
+                                title="সম্পাদনা"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              {canManage && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMember(m)}
+                                  className="p-2 rounded-full bg-red-50 hover:bg-red-600 text-red-600 hover:text-white transition"
+                                  title="ডিলিট"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -5345,7 +5342,7 @@ export default function App() {
                                     : 'bg-gray-200 text-gray-700 border-gray-300'
                                 }`}
                               >
-                                {camp.is_active ? 'হোমপেজে চালু (On)' : 'হাইড করা (Off)'}
+                                {camp.is_active ? 'হোমপেজে চালু' : 'হাইড করা'}
                               </button>
                               <button
                                 type="button"
@@ -5380,81 +5377,72 @@ export default function App() {
                   )}
                 </div>
 
-                {/* 2. MONTHLY MEMBER CONTRIBUTION REMINDER MANAGER */}
-                <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#D4AF37]/45 shadow-sm space-y-4">
+                {/* 2. MONTHLY MEMBER CONTRIBUTION REMINDER MANAGER (COMPACT MOBILE CARDS, NO HORIZONTAL SCROLL) */}
+                <div className="bg-white rounded-3xl p-4 sm:p-6 border border-[#D4AF37]/45 shadow-sm space-y-3.5">
                   <div>
                     <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
                       সদস্যদের মাসিক ফান্ড রিমাইন্ডার তালিকা
                     </h3>
                     <p className="text-xs text-gray-500">
-                      নির্দিষ্ট টাকার বাধ্যবাধকতা ছাড়াই সদস্যদের মাসিক ফান্ড প্রদানের আন্তরিক রিমাইন্ডার স্ট্যাটাস এখান থেকে নিয়ন্ত্রণ করুন
+                      প্রত্যেক সদস্যের মাসিক ফান্ড স্ট্যাটাস ও রিমাইন্ডার এখান থেকে নিয়ন্ত্রণ করুন
                     </p>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[560px]">
-                      <thead>
-                        <tr className="border-b border-gray-200 text-xs font-bold text-gray-600 bg-[#F4F7F5]">
-                          <th className="py-2.5 px-3 rounded-tl-xl">সদস্যের নাম</th>
-                          <th className="py-2.5 px-3">বর্তমান অবস্থা</th>
-                          <th className="py-2.5 px-3">রিমাইন্ডার সেট করুন</th>
-                          <th className="py-2.5 px-3 text-right rounded-tr-xl">বার্তা কপি</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100 text-xs">
-                        {approvedMembers.map((m) => {
-                          const rem = getMemberMonthlyReminder(m);
-                          return (
-                            <tr key={m.id} className="hover:bg-gray-50/70">
-                              <td className="py-2.5 px-3 font-bold text-[#0A2F25]">{m.name}</td>
-                              <td className="py-2.5 px-3">
-                                <span
-                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                                    rem.status === 'paid'
-                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                      : rem.status === 'due_2m'
-                                      ? 'bg-red-50 text-red-700 border border-red-200'
-                                      : 'bg-amber-50 text-amber-800 border border-amber-200'
-                                  }`}
-                                >
-                                  <span>{rem.label}</span>
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3">
-                                <select
-                                  value={m.reminder_status || 'auto'}
-                                  onChange={(e) =>
-                                    handleSetMemberReminderStatus(m, e.target.value as any)
-                                  }
-                                  className="px-2.5 py-1 rounded-full border border-gray-300 bg-white text-xs font-semibold text-[#0A2F25]"
-                                >
-                                  <option value="auto">অটোমেটিক (হিসাব অনুযায়ী)</option>
-                                  <option value="paid">এই মাসে দিয়েছেন</option>
-                                  <option value="due_1m">১ মাসের রিমাইন্ডার</option>
-                                  <option value="due_2m">গত ২ মাসের রিমাইন্ডার</option>
-                                </select>
-                              </td>
-                              <td className="py-2.5 px-3 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    try {
-                                      navigator.clipboard.writeText(`${m.name} ${rem.message}`);
-                                      showNotice('রিমাইন্ডার মেসেজটি কপি করা হয়েছে!', 'success');
-                                    } catch {
-                                      showNotice(rem.message, 'success');
-                                    }
-                                  }}
-                                  className="px-3 py-1 rounded-full bg-[#0A2F25]/10 hover:bg-[#0A2F25] text-[#0A2F25] hover:text-[#F3D568] font-bold text-[11px] transition"
-                                >
-                                  মেসেজ কপি করুন
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <div className="space-y-2">
+                    {approvedMembers.map((m) => {
+                      const rem = getMemberMonthlyReminder(m);
+                      return (
+                        <div
+                          key={m.id}
+                          className="p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                        >
+                          <div className="flex items-center justify-between sm:justify-start gap-2">
+                            <span className="font-bold text-xs sm:text-sm text-[#0A2F25]">{m.name}</span>
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
+                                rem.status === 'paid'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : rem.status === 'due_2m'
+                                  ? 'bg-red-50 text-red-700 border border-red-200'
+                                  : 'bg-amber-50 text-amber-800 border border-amber-200'
+                              }`}
+                            >
+                              {rem.label}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between sm:justify-end gap-2">
+                            <select
+                              value={m.reminder_status || 'auto'}
+                              onChange={(e) =>
+                                handleSetMemberReminderStatus(m, e.target.value as any)
+                              }
+                              className="flex-1 sm:flex-initial px-3 py-1.5 rounded-full border border-gray-300 bg-white text-xs font-semibold text-[#0A2F25]"
+                            >
+                              <option value="auto">অটোমেটিক</option>
+                              <option value="paid">এই মাসে দিয়েছেন</option>
+                              <option value="due_1m">১ মাসের রিমাইন্ডার</option>
+                              <option value="due_2m">গত ২ মাসের রিমাইন্ডার</option>
+                            </select>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  navigator.clipboard.writeText(`${m.name}, ${rem.message}`);
+                                  showNotice('রিমাইন্ডার মেসেজটি কপি করা হয়েছে!', 'success');
+                                } catch {
+                                  showNotice(rem.message, 'success');
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-full bg-[#0A2F25] text-[#F3D568] font-bold text-[11px] whitespace-nowrap shrink-0"
+                            >
+                              মেসেজ কপি
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
                 <form
@@ -5577,86 +5565,89 @@ export default function App() {
                   </button>
                 </form>
 
-                {/* Finances Table */}
-                <div className="bg-white rounded-3xl p-4 sm:p-6 border border-[#D4AF37]/40 shadow-sm overflow-hidden">
-                  <h3 className="text-base sm:text-lg font-bold text-[#0A2F25] mb-4">
-                    জমা ও খরচের তালিকা ({finances.length})
+                {/* Finances List (100% Mobile-Responsive Card Rows, Zero Horizontal Scroll) */}
+                <div className="bg-white rounded-3xl p-4 sm:p-6 border border-[#D4AF37]/40 shadow-sm">
+                  <h3 className="text-base sm:text-lg font-bold text-[#0A2F25] mb-3.5">
+                    কালেকশন ও খরচের তালিকা ({finances.length})
                   </h3>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[600px]">
-                      <thead>
-                        <tr className="border-b border-gray-200 text-xs font-bold text-gray-600 bg-[#F4F7F5]">
-                          <th className="py-3 px-3 rounded-tl-xl">ধরন</th>
-                          <th className="py-3 px-3">বিবরণ ও সদস্য</th>
-                          <th className="py-3 px-3">মাস</th>
-                          <th className="py-3 px-3 text-right">পরিমাণ (৳)</th>
-                          <th className="py-3 px-3 text-right rounded-tr-xl">অ্যাকশন</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100 text-xs sm:text-sm">
-                        {finances.map((f) => (
-                          <tr key={f.id} className="hover:bg-gray-50">
-                            <td className="py-3 px-3">
+                  {finances.length === 0 ? (
+                    <p className="text-xs sm:text-sm text-gray-500 py-6 text-center">
+                      এখনো কোনো হিসাব যুক্ত করা হয়নি।
+                    </p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {finances.map((f) => (
+                        <div
+                          key={f.id}
+                          className="p-3.5 rounded-2xl bg-[#F4F7F5] border border-gray-200 flex items-center justify-between gap-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5 mb-1">
                               <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                                   f.type === 'income'
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : 'bg-red-100 text-red-700'
                                 }`}
                               >
-                                {f.type === 'income' ? 'জমা (+)' : 'খরচ (-)'}
+                                {f.type === 'income' ? 'কালেকশন (+)' : 'খরচ (-)'}
                               </span>
-                            </td>
-                            <td className="py-3 px-3">
-                              <p className="font-semibold text-[#0A2F25]">{f.description}</p>
-                              {f.type === 'income' && f.memberuid && (
-                                <p className="text-[11px] text-gray-500">
-                                  সদস্য: {getMemberNameByUid(f.memberuid)}
-                                </p>
+                              {f.month && (
+                                <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[10px] font-semibold text-gray-600">
+                                  {f.month}
+                                </span>
                               )}
-                            </td>
-                            <td className="py-3 px-3 text-gray-600">{f.month || '—'}</td>
-                            <td
-                              className={`py-3 px-3 text-right font-bold font-english ${
+                            </div>
+                            <p className="font-bold text-xs sm:text-sm text-[#0A2F25] break-words">
+                              {f.description}
+                            </p>
+                            {f.type === 'income' && f.memberuid && (
+                              <p className="text-[11px] text-gray-500 mt-0.5">
+                                সদস্য: {getMemberNameByUid(f.memberuid)}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
+                            <span
+                              className={`text-sm sm:text-base font-bold font-english whitespace-nowrap ${
                                 f.type === 'income' ? 'text-emerald-700' : 'text-red-600'
                               }`}
                             >
-                              {f.type === 'income' ? '+' : '-'} ৳{' '}
-                              {Number(f.amount).toLocaleString('en-US')}
-                            </td>
-                            <td className="py-3 px-3 text-right">
-                              <div className="inline-flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setFinanceForm({
-                                      id: f.id,
-                                      type: f.type,
-                                      amount: String(f.amount),
-                                      memberuid: f.memberuid || '',
-                                      month: f.month || '',
-                                      description: f.description || ''
-                                    })
-                                  }
-                                  className="p-2 rounded-xl bg-[#0A2F25]/10 hover:bg-[#0A2F25] text-[#0A2F25] hover:text-[#F3D568] transition"
-                                >
-                                  <Edit3 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteFinance(f)}
-                                  className="p-2 rounded-xl bg-red-50 hover:bg-red-600 text-red-600 hover:text-white transition"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                              {f.type === 'income' ? '+' : '-'} ৳ {Number(f.amount).toLocaleString('en-US')}
+                            </span>
+
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFinanceForm({
+                                    id: f.id,
+                                    type: f.type,
+                                    amount: String(f.amount),
+                                    memberuid: f.memberuid || '',
+                                    month: f.month || '',
+                                    description: f.description || ''
+                                  })
+                                }
+                                className="p-1.5 rounded-full bg-[#0A2F25]/10 hover:bg-[#0A2F25] text-[#0A2F25] hover:text-[#F3D568] transition"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteFinance(f)}
+                                className="p-1.5 rounded-full bg-red-50 hover:bg-red-600 text-red-600 hover:text-white transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -6484,20 +6475,19 @@ export default function App() {
 
                     <div>
                       <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                        বয়স (বছর)
+                        জন্মতারিখ (গোপন থাকবে)
                       </label>
                       <input
-                        type="text"
+                        type="date"
                         value={profileAge}
                         onChange={(e) => setProfileAge(e.target.value)}
-                        placeholder="যেমন: ২৪"
-                        className="w-full px-3.5 py-2.5 rounded-2xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
+                        className="w-full px-3.5 py-2.5 rounded-2xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                        রক্তের গ্রুপ (Blood Group)
+                        রক্তের গ্রুপ
                       </label>
                       <select
                         value={profileBloodGroup}
@@ -6741,38 +6731,33 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Age Input */}
+              {/* Date of Birth Input (Never shown publicly) */}
               <div>
                 <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                  ২. আপনার বয়স (বছর) *
+                  ২. আপনার জন্মতারিখ *
                 </label>
                 <input
-                  type="number"
-                  min="10"
-                  max="100"
+                  type="date"
                   required
                   value={onboardingAge}
                   onChange={(e) => setOnboardingAge(e.target.value)}
-                  placeholder="যেমন: ২৪"
                   className="w-full px-3.5 py-2.5 rounded-2xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
                 />
               </div>
 
-              {/* Mobile Input if missing (e.g. after Google Login) */}
-              {!appUser.mobile && (
-                <div>
-                  <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                    ৩. বাংলাদেশি মোবাইল নাম্বার (ঐচ্ছিক)
-                  </label>
-                  <input
-                    type="tel"
-                    value={onboardingMobile}
-                    onChange={(e) => setOnboardingMobile(e.target.value)}
-                    placeholder="017XXXXXXXX"
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
-                  />
-                </div>
-              )}
+              {/* Optional Contact Mobile Number for Blood Donation */}
+              <div>
+                <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                  ৩. যোগাযোগের মোবাইল নাম্বার (ঐচ্ছিক — রক্তের প্রয়োজনে যোগাযোগের জন্য)
+                </label>
+                <input
+                  type="tel"
+                  value={onboardingMobile}
+                  onChange={(e) => setOnboardingMobile(e.target.value)}
+                  placeholder="017XXXXXXXX (ঐচ্ছিক)"
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
+                />
+              </div>
 
               <div className="flex flex-col sm:flex-row gap-2 pt-2">
                 <button
@@ -6795,26 +6780,26 @@ export default function App() {
         </div>
       )}
 
-      {/* PUBLIC MEMBER DETAIL POPUP MODAL (`selectedMemberModal`) */}
+      {/* PUBLIC MEMBER & BLOOD DONOR CONTACT POPUP MODAL (`selectedMemberModal`) */}
       {selectedMemberModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn"
           onClick={() => setSelectedMemberModal(null)}
         >
           <div
-            className="bg-white rounded-3xl max-w-md w-full overflow-hidden border-2 border-[#D4AF37] shadow-2xl"
+            className="bg-white rounded-3xl max-w-sm w-full overflow-hidden border-2 border-[#D4AF37] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-gradient-to-r from-[#0A2F25] via-[#155e4a] to-[#0A2F25] p-6 text-center text-white relative">
+            <div className="bg-gradient-to-r from-[#0A2F25] via-[#155e4a] to-[#0A2F25] p-5 text-center text-white relative">
               <button
                 type="button"
                 onClick={() => setSelectedMemberModal(null)}
-                className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition"
+                className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition"
               >
                 <X className="w-4 h-4" />
               </button>
 
-              <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] mx-auto mb-3 shadow-xl">
+              <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] mx-auto mb-2.5 shadow-xl">
                 {selectedMemberModal.avatar_url ? (
                   <img
                     src={optimizeMedia(selectedMemberModal.avatar_url)}
@@ -6822,32 +6807,26 @@ export default function App() {
                     className="w-full h-full rounded-full object-cover bg-white"
                   />
                 ) : (
-                  <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center text-3xl font-bold">
+                  <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center text-2xl font-bold">
                     {selectedMemberModal.name.charAt(0)}
                   </div>
                 )}
               </div>
 
-              <h3 className="text-xl font-bold text-white">{selectedMemberModal.name}</h3>
-              <span className="mt-1.5 inline-flex items-center px-4 py-1 rounded-full bg-[#D4AF37] text-[#0A2F25] text-xs font-bold">
+              <h3 className="text-lg font-bold text-white">{selectedMemberModal.name}</h3>
+              <span className="mt-1 inline-flex items-center px-3.5 py-0.5 rounded-full bg-[#D4AF37] text-[#0A2F25] text-xs font-bold">
                 {!selectedMemberModal.designation || selectedMemberModal.designation === 'অ্যাডমিন'
                   ? 'সাধারণ সদস্য'
                   : selectedMemberModal.designation}
               </span>
             </div>
 
-            <div className="p-6 space-y-3.5 text-sm">
-              {selectedMemberModal.age && (
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200">
-                  <span className="text-xs font-bold text-gray-600">বয়স</span>
-                  <span className="text-xs font-bold text-[#0A2F25]">{selectedMemberModal.age} বছর</span>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200">
-                <span className="text-xs font-bold text-gray-600">রক্তের গ্রুপ (Blood Group)</span>
+            <div className="p-5 space-y-3 text-sm">
+              {/* Blood Group Highlight Card */}
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#F4F7F5] border border-gray-200">
+                <span className="text-xs font-bold text-[#0A2F25]">রক্তের গ্রুপ</span>
                 {selectedMemberModal.blood_group ? (
-                  <span className="px-3 py-0.5 rounded-full bg-red-600 text-white font-english font-bold text-xs">
+                  <span className="px-3.5 py-1 rounded-full bg-red-600 text-white font-english font-bold text-xs shadow-sm">
                     {selectedMemberModal.blood_group}
                   </span>
                 ) : (
@@ -6856,48 +6835,74 @@ export default function App() {
               </div>
 
               {selectedMemberModal.bio && (
-                <div className="p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200">
-                  <span className="block text-xs font-bold text-gray-600 mb-1">পরিচয় ও ঠিকানা</span>
-                  <p className="text-xs sm:text-sm font-medium text-[#0A2F25]">
+                <div className="p-3.5 rounded-2xl bg-[#F4F7F5] border border-gray-200">
+                  <span className="block text-[11px] font-bold text-gray-500 mb-0.5">ঠিকানা / পরিচয়</span>
+                  <p className="text-xs font-semibold text-[#0A2F25]">
                     {selectedMemberModal.bio}
                   </p>
                 </div>
               )}
 
-              {selectedMemberModal.mobile && (
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200">
-                  <span className="text-xs font-bold text-gray-600">মোবাইল</span>
-                  <span className="font-english font-semibold text-xs text-[#0A2F25]">
-                    {selectedMemberModal.mobile}
-                  </span>
-                </div>
-              )}
+              {/* Blood Emergency Contact Section */}
+              <div className="p-3.5 rounded-2xl bg-[#0A2F25]/5 border border-[#D4AF37]/40 space-y-2.5">
+                <span className="block text-xs font-bold text-[#0A2F25]">
+                  জরুরি রক্তের প্রয়োজনে যোগাযোগ
+                </span>
 
-              {formatDisplayEmail(selectedMemberModal.email) && (
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200">
-                  <span className="text-xs font-bold text-gray-600">ইমেইল</span>
-                  <span className="font-english font-semibold text-xs text-[#0A2F25] truncate max-w-[200px]">
-                    {formatDisplayEmail(selectedMemberModal.email)}
-                  </span>
-                </div>
-              )}
+                {selectedMemberModal.mobile ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-english font-bold text-[#0A2F25]">
+                        <Phone className="w-3.5 h-3.5 text-[#155e4a]" />
+                        <span>{selectedMemberModal.mobile}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            navigator.clipboard.writeText(selectedMemberModal.mobile);
+                            showNotice('মোবাইল নাম্বার কপি করা হয়েছে!', 'success');
+                          } catch {
+                            showNotice(selectedMemberModal.mobile, 'success');
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-[#0A2F25] text-[11px] font-bold transition"
+                      >
+                        কপি করুন
+                      </button>
+                    </div>
 
-              {selectedMemberModal.fb_url && (
-                <a
-                  href={selectedMemberModal.fb_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-2.5 px-4 rounded-full bg-[#0A2F25] text-[#F3D568] font-bold text-xs flex items-center justify-center gap-2 shadow hover:opacity-95 transition"
-                >
-                  <Facebook className="w-4 h-4" />
-                  <span>ফেসবুক প্রোফাইল দেখুন</span>
-                </a>
-              )}
+                    <a
+                      href={`tel:${selectedMemberModal.mobile}`}
+                      className="w-full py-2.5 px-4 rounded-full bg-gradient-to-r from-[#0A2F25] to-[#155e4a] text-[#F3D568] border border-[#D4AF37] font-bold text-xs flex items-center justify-center gap-2 shadow hover:opacity-95 transition"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      <span>সরাসরি কল করুন</span>
+                    </a>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    এই সদস্য এখনো যোগাযোগের মোবাইল নাম্বার যুক্ত করেননি।
+                  </p>
+                )}
+
+                {selectedMemberModal.fb_url && (
+                  <a
+                    href={selectedMemberModal.fb_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2 px-4 rounded-full bg-white text-[#0A2F25] border border-[#D4AF37]/60 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-gray-50 transition"
+                  >
+                    <Facebook className="w-3.5 h-3.5 text-[#155e4a]" />
+                    <span>ফেসবুক প্রোফাইল</span>
+                  </a>
+                )}
+              </div>
 
               <button
                 type="button"
                 onClick={() => setSelectedMemberModal(null)}
-                className="w-full py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-[#0A2F25] font-bold text-xs transition"
+                className="w-full py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-[#0A2F25] font-bold text-xs transition"
               >
                 বন্ধ করুন
               </button>
