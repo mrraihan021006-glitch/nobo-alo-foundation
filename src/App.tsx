@@ -63,7 +63,9 @@ const DEFAULT_TAGLINE = 'মানবতার সেবায়, একসা�
 const DEFAULT_ANNOUNCEMENT = 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।';
 const FOUNDATION_FB_URL = 'https://facebook.com/noboalofoundation00';
 const DEVELOPER_CREDIT_TEXT = 'DEVELOPED BY MOHAMMAD RAIHAN';
-const DEVELOPER_FB_URL = 'https://facebook.com/mohammadraihan3859';
+const DEVELOPER_FB_URL = 'https://facebook.com/meraihan79';
+const GOOGLE_CLIENT_ID = '55697442534-8qsn67qq9idh9q0accds2pngflitmhoo.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = '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';
 
 // No external dead Supabase dependency; stubbed safely so zero network calls ever go to xlcepfrjngtzrmpazkla.supabase.co
 const supabase: any = {
@@ -316,6 +318,7 @@ interface MemberUser {
   promoted_by?: string;
   fb_url?: string;
   blood_group?: string;
+  age?: string;
   bio?: string;
   reminder_status?: 'auto' | 'paid' | 'due_1m' | 'due_2m';
   reminder_note?: string;
@@ -487,7 +490,7 @@ const getLocalD1Store = () => {
         designation: 'অ্যাডমিন',
         sort_order: 1,
         promoted_by: '',
-        fb_url: 'https://facebook.com/mohammadraihan3859'
+        fb_url: 'https://facebook.com/meraihan79'
       }
     ],
     activities: [],
@@ -541,6 +544,40 @@ const runLocalD1Fallback = (endpoint: string, method: string, body?: any) => {
     saveLocalD1Store(store);
     writeLocalJson(SETTINGS_CACHE_KEY, store.settings);
     return { ok: true, status: 200, notMounted: false, liveD1: false, data: { ok: true } };
+  }
+
+  if (pathPart === 'google-auth' && method === 'POST') {
+    const gEmail = String(body?.email || '').trim().toLowerCase();
+    const gName = String(body?.name || gEmail.split('@')[0] || 'সদস্য').trim();
+    const gPic = String(body?.picture || body?.avatar_url || '').trim();
+    const isSuper = gEmail === SUPER_ADMIN_EMAIL.toLowerCase();
+    let user = store.members.find((m: any) => String(m.email || '').toLowerCase() === gEmail);
+    if (!user) {
+      user = {
+        id: isSuper ? 'super-admin-raihan' : `mem-${Date.now()}`,
+        name: gName,
+        email: gEmail,
+        mobile: '',
+        avatar_url: gPic,
+        role: isSuper ? 'admin' : 'member',
+        status: 'approved',
+        designation: isSuper ? 'অ্যাডমিন' : 'সাধারণ সদস্য',
+        sort_order: isSuper ? 1 : 100,
+        promoted_by: '',
+        fb_url: '',
+        blood_group: '',
+        age: '',
+        bio: '',
+        reminder_status: 'auto',
+        reminder_note: ''
+      };
+      store.members.push(user);
+      saveLocalD1Store(store);
+    } else if (gPic && !user.avatar_url) {
+      user.avatar_url = gPic;
+      saveLocalD1Store(store);
+    }
+    return { ok: true, status: 200, notMounted: false, liveD1: false, data: { user, ok: true } };
   }
 
   if ((pathPart === 'login' || pathPart === 'auth/login') && method === 'POST') {
@@ -803,6 +840,29 @@ const uploadMediaToCloudinary = async (
 // ============================================================================
 // 5. REUSABLE UI COMPONENTS (MANDALA, CIRCULAR LOGO, ACTIVITY SLIDER, MODALS)
 // ============================================================================
+
+
+// Official Multi-Color Google 'G' SVG Icon (100% Pure SVG)
+const GoogleBrandIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
+  <svg viewBox="0 0 24 24" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      fill="#4285F4"
+    />
+    <path
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      fill="#34A853"
+    />
+    <path
+      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+      fill="#FBBC05"
+    />
+    <path
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      fill="#EA4335"
+    />
+  </svg>
+);
 
 // Logo-Matched 8-Pointed Islamic Rub el Hizb Octagram & Arch Crest (Matches Official Nobo Alo Logo)
 const IslamicMandala: React.FC<{ className?: string; size?: number }> = ({
@@ -1317,6 +1377,7 @@ export default function App() {
       promoted_by: u.promoted_by ? String(u.promoted_by) : '',
       fb_url: u.fb_url ? String(u.fb_url) : '',
       blood_group: u.blood_group ? String(u.blood_group) : '',
+      age: u.age ? String(u.age) : '',
       bio: u.bio ? String(u.bio) : '',
       reminder_status: (['auto', 'paid', 'due_1m', 'due_2m'].includes(u.reminder_status) ? u.reminder_status : 'auto') as any,
       reminder_note: u.reminder_note ? String(u.reminder_note) : '',
@@ -1753,6 +1814,183 @@ export default function App() {
   const [selectedMemberModal, setSelectedMemberModal] = useState<MemberUser | null>(null);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [selectedBloodFilter, setSelectedBloodFilter] = useState('সব');
+
+  // Blood Group & Age Onboarding + Recurring Reminder Popup States
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [onboardingBlood, setOnboardingBlood] = useState('');
+  const [onboardingAge, setOnboardingAge] = useState('');
+  const [onboardingMobile, setOnboardingMobile] = useState('');
+  const [onboardingMsgIdx, setOnboardingMsgIdx] = useState(0);
+  const [savingOnboarding, setSavingOnboarding] = useState(false);
+
+  const ONBOARDING_MESSAGES = [
+    'আপনার রক্তের গ্রুপ ও বয়স কী? জরুরি মুহূর্তে জীবন বাঁচাতে এখনই সিলেক্ট করুন।',
+    'নব আলো ফাউন্ডেশনের সদস্য প্রোফাইল সম্পূর্ণ করতে আপনার রক্তের গ্রুপ ও বয়স যুক্ত করুন।',
+    'এক ফোঁটা রক্ত বাঁচাতে পারে একটি প্রাণ—অনুগ্রহ করে আপনার রক্তের গ্রুপ নির্বাচন করুন।',
+    'জরুরি রক্তদাতা তালিকায় যুক্ত হতে আপনার রক্তের গ্রুপ ও বয়স নির্বাচন করুন।'
+  ];
+
+  const requestBrowserNotificationAccess = async () => {
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
+    } catch {
+      // Ignore if unsupported
+    }
+  };
+
+  const triggerBloodGroupBrowserNotification = (msgText: string) => {
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('নব আলো ফাউন্ডেশন — রক্তের গ্রুপ যুক্ত করুন', {
+          body: msgText
+        });
+      }
+    } catch {
+      // Ignore notification errors on mobile webviews
+    }
+  };
+
+  // Automatically check when user logs in: if blood_group or age is missing, show Onboarding Popup & start recurring reminder
+  useEffect(() => {
+    if (!appUser) {
+      setShowOnboardingModal(false);
+      return;
+    }
+    requestBrowserNotificationAccess();
+
+    const missingBloodOrAge = !appUser.blood_group || !appUser.age;
+    if (missingBloodOrAge) {
+      setOnboardingBlood(appUser.blood_group || '');
+      setOnboardingAge(appUser.age || '');
+      setOnboardingMobile(appUser.mobile || '');
+      const initialTimer = setTimeout(() => {
+        setShowOnboardingModal(true);
+      }, 600);
+
+      // If they skip without adding blood_group, re-notify & pop up periodically with rotating messages
+      const recurringInterval = setInterval(() => {
+        setOnboardingMsgIdx((prev) => {
+          const nextIdx = (prev + 1) % ONBOARDING_MESSAGES.length;
+          triggerBloodGroupBrowserNotification(ONBOARDING_MESSAGES[nextIdx]);
+          return nextIdx;
+        });
+        setShowOnboardingModal(true);
+      }, 45000);
+
+      return () => {
+        clearTimeout(initialTimer);
+        clearInterval(recurringInterval);
+      };
+    } else {
+      setShowOnboardingModal(false);
+    }
+  }, [appUser?.id, appUser?.blood_group, appUser?.age]);
+
+  const handleSaveOnboardingInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appUser) return;
+    if (!onboardingBlood) {
+      showNotice('অনুগ্রহ করে আপনার রক্তের গ্রুপ সিলেক্ট করুন।', 'error');
+      return;
+    }
+    if (!onboardingAge.trim()) {
+      showNotice('অনুগ্রহ করে আপনার বয়স লিখুন।', 'error');
+      return;
+    }
+    let cleanMob = appUser.mobile || '';
+    if (onboardingMobile.trim()) {
+      const bd = analyzeBdPhone(onboardingMobile);
+      if (!bd.isValidBd) {
+        showNotice('সঠিক ১১ ডিজিটের বাংলাদেশি মোবাইল নাম্বার দিন।', 'error');
+        return;
+      }
+      cleanMob = bd.normalized;
+    }
+
+    setSavingOnboarding(true);
+    const updated: MemberUser = {
+      ...appUser,
+      blood_group: onboardingBlood,
+      age: bnToEnDigits(onboardingAge.trim()),
+      mobile: cleanMob
+    };
+    setAppUser(updated);
+    setMembers((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+    setShowOnboardingModal(false);
+
+    await callD1Api('members', 'PUT', {
+      id: updated.id,
+      email: updated.email,
+      blood_group: updated.blood_group,
+      age: updated.age,
+      mobile: updated.mobile
+    });
+    setSavingOnboarding(false);
+    showNotice('ধন্যবাদ! আপনার রক্তের গ্রুপ ও বয়স সফলভাবে যুক্ত হয়েছে।', 'success');
+  };
+
+  // Continue with Google Handler (Uses Official Google Identity Services OAuth2 Popup)
+  const handleContinueWithGoogle = () => {
+    requestBrowserNotificationAccess();
+    const gsi = (window as any).google?.accounts?.oauth2;
+    if (gsi && typeof gsi.initTokenClient === 'function') {
+      try {
+        const tokenClient = gsi.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: 'openid email profile',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.error) {
+              showNotice('গুগল লগইন সম্পন্ন হয়নি। আবার চেষ্টা করুন।', 'error');
+              return;
+            }
+            if (tokenResponse?.access_token) {
+              setAuthLoading(true);
+              try {
+                const uRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+                });
+                const uJson = uRes.ok ? await uRes.json() : {};
+                const authRes = await callD1Api('google-auth', 'POST', {
+                  access_token: tokenResponse.access_token,
+                  email: uJson.email || '',
+                  name: uJson.name || '',
+                  picture: uJson.picture || ''
+                });
+                setAuthLoading(false);
+                if (!authRes.ok || !authRes.data?.user) {
+                  showNotice(authRes.data?.error || 'গুগল লগইন ব্যর্থ হয়েছে।', 'error');
+                  return;
+                }
+                const loggedUser = normalizeMemberRow(authRes.data.user);
+                if (loggedUser.avatar_url) {
+                  await autoRecordInGallery(loggedUser.avatar_url);
+                }
+                setMembers((prev) => {
+                  const exists = prev.some((m) => m.id === loggedUser.id || m.email.toLowerCase() === loggedUser.email.toLowerCase());
+                  return exists
+                    ? prev.map((m) => (m.id === loggedUser.id || m.email.toLowerCase() === loggedUser.email.toLowerCase() ? loggedUser : m))
+                    : [...prev, loggedUser];
+                });
+                setAppUser(loggedUser);
+                showNotice(`স্বাগতম, ${loggedUser.name}!`, 'success');
+                setCurrentView('dashboard');
+              } catch {
+                setAuthLoading(false);
+                showNotice('গুগল প্রোফাইল যাচাই করতে সমস্যা হয়েছে।', 'error');
+              }
+            }
+          }
+        });
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        return;
+      } catch {
+        // Fallback below if popup blocked in sandbox
+      }
+    }
+    showNotice('গুগল লগইন পপআপ লোড হচ্ছে, অনুগ্রহ করে একটু অপেক্ষা করে আবার ক্লিক করুন।', 'error');
+  };
   const [campaignForm, setCampaignForm] = useState<{
     id: string;
     title: string;
@@ -2768,6 +3006,7 @@ export default function App() {
         designation: updated.designation,
         sort_order: updated.sort_order,
         blood_group: updated.blood_group,
+        age: updated.age,
         bio: updated.bio,
         fb_url: updated.fb_url
       });
@@ -3278,6 +3517,7 @@ export default function App() {
   const [profileMobile, setProfileMobile] = useState('');
   const [profileEmail, setProfileEmail] = useState('');
   const [profileBloodGroup, setProfileBloodGroup] = useState('');
+  const [profileAge, setProfileAge] = useState('');
   const [profileFbUrl, setProfileFbUrl] = useState('');
   const [profileBio, setProfileBio] = useState('');
   const [profileNewPassword, setProfileNewPassword] = useState('');
@@ -3288,6 +3528,7 @@ export default function App() {
       setProfileMobile(appUser.mobile || '');
       setProfileEmail(formatDisplayEmail(appUser.email));
       setProfileBloodGroup(appUser.blood_group || '');
+      setProfileAge(appUser.age || '');
       setProfileFbUrl(appUser.fb_url || '');
       setProfileBio(appUser.bio || '');
     }
@@ -3361,6 +3602,7 @@ export default function App() {
       mobile: cleanMob,
       email: cleanEm,
       blood_group: profileBloodGroup,
+      age: bnToEnDigits(profileAge.trim()),
       fb_url: profileFbUrl.trim(),
       bio: profileBio.trim()
     };
@@ -3377,6 +3619,7 @@ export default function App() {
         designation: updatedUser.designation,
         avatar_url: updatedUser.avatar_url,
         blood_group: updatedUser.blood_group,
+        age: updatedUser.age,
         fb_url: updatedUser.fb_url,
         bio: updatedUser.bio,
         new_password: profileNewPassword || undefined
@@ -3434,26 +3677,26 @@ export default function App() {
         </div>
       </div>
 
-      {/* 2. MOBILE-FIRST HEADER / NAVBAR WITH MODERN PROFILE AVATAR POPUP */}
+      {/* 2. MOBILE-FIRST HEADER / NAVBAR (100% MOBILE RESPONSIVE, ZERO TEXT BREAKING) */}
       <header className="sticky top-0 z-30 bg-[#0A2F25]/95 backdrop-blur-lg border-b border-[#D4AF37]/45 shadow-[0_8px_30px_rgba(10,47,37,0.28)]">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 relative">
-          {/* Left Side: Circular White-BG Logo + Site Name */}
+          {/* Left Side: Circular White-BG Logo + Unbreakable Single-Line Site Name */}
           <button
             type="button"
             onClick={() => {
               setHeaderProfileMenuOpen(false);
               setCurrentView('home');
             }}
-            className="flex items-center gap-2.5 sm:gap-3 text-left group focus:outline-none min-w-0"
+            className="flex items-center gap-2 sm:gap-3 text-left group focus:outline-none min-w-0 shrink"
           >
-            <div className="p-0.5 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-md group-hover:scale-105 transition-transform">
+            <div className="p-0.5 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-md group-hover:scale-105 transition-transform shrink-0">
               <WhiteCircularLogo
                 logoUrl={siteSettings.logo_url}
-                sizeClass="w-10 h-10 sm:w-11 sm:h-11"
+                sizeClass="w-9 h-9 sm:w-11 sm:h-11"
               />
             </div>
             <div className="min-w-0">
-              <span className="block text-base sm:text-xl md:text-2xl font-bold text-white leading-tight break-words group-hover:text-[#F3D568] transition-colors">
+              <span className="block text-[15px] sm:text-xl md:text-2xl font-bold text-white leading-tight whitespace-nowrap truncate group-hover:text-[#F3D568] transition-colors">
                 {siteSettings.site_name || DEFAULT_SITE_NAME}
               </span>
               <span className="hidden sm:block text-[11px] text-[#F3D568]/85 truncate max-w-xs">
@@ -3462,22 +3705,27 @@ export default function App() {
             </div>
           </button>
 
-          {/* Right Side Navigation Buttons + Modern Profile Avatar Button */}
-          <nav className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Right Side Compact Navigation Buttons */}
+          <nav className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Members Button: Icon-Only on Mobile when Logged In so Site Title never breaks */}
             <button
               type="button"
               onClick={() => {
                 setHeaderProfileMenuOpen(false);
                 setCurrentView('members');
               }}
-              className={`inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all border ${
+              aria-label="সদস্যবৃন্দ"
+              title="সদস্যবৃন্দ"
+              className={`inline-flex items-center justify-center gap-1.5 ${
+                appUser ? 'w-9 h-9 sm:w-auto sm:px-4 sm:py-2' : 'px-3.5 sm:px-4 py-2'
+              } rounded-full text-xs sm:text-sm font-semibold transition-all border whitespace-nowrap shrink-0 ${
                 currentView === 'members'
                   ? 'bg-[#D4AF37] text-[#0A2F25] border-[#F3D568] shadow-md'
                   : 'bg-[#124A3B]/90 text-white border-[#D4AF37]/40 hover:border-[#D4AF37] hover:bg-[#155e4a]'
               }`}
             >
               <Users className="w-4 h-4 text-[#F3D568] shrink-0" />
-              <span>সদস্য</span>
+              <span className={appUser ? 'hidden sm:inline' : 'inline'}>সদস্য</span>
             </button>
 
             {!appUser ? (
@@ -3485,17 +3733,18 @@ export default function App() {
                 type="button"
                 onClick={() => setCurrentView('join')}
                 aria-label="যুক্ত হোন"
-                className={`inline-flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-bold transition-all shadow-md border ${
+                className={`inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all shadow-md border whitespace-nowrap shrink-0 ${
                   currentView === 'join' || currentView === 'login'
                     ? 'bg-[#F3D568] text-[#0A2F25] border-white'
                     : 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] hover:brightness-105'
                 }`}
               >
                 <UserPlus className="w-4 h-4 shrink-0" />
-                <span className="hidden md:inline">যুক্ত হোন</span>
+                <span>যুক্ত হোন</span>
               </button>
             ) : (
               <>
+                {/* Dashboard Button: Compact Circular Icon on Mobile, Pill with Text on Desktop */}
                 <button
                   type="button"
                   onClick={() => {
@@ -3503,14 +3752,15 @@ export default function App() {
                     setCurrentView('dashboard');
                   }}
                   aria-label="ড্যাশবোর্ড"
-                  className={`inline-flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-bold transition-all shadow-md border ${
+                  title="ড্যাশবোর্ড"
+                  className={`inline-flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all shadow-md border whitespace-nowrap shrink-0 ${
                     currentView === 'dashboard'
                       ? 'bg-[#F3D568] text-[#0A2F25] border-white'
                       : 'bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] border-[#F3D568] hover:brightness-105'
                   }`}
                 >
                   <LayoutDashboard className="w-4 h-4 shrink-0" />
-                  <span className="hidden md:inline">ড্যাশবোর্ড</span>
+                  <span className="hidden sm:inline">ড্যাশবোর্ড</span>
                 </button>
 
                 {/* Modern Circular Profile Avatar Button Next to Dashboard */}
@@ -3519,9 +3769,9 @@ export default function App() {
                     type="button"
                     onClick={() => setHeaderProfileMenuOpen((prev) => !prev)}
                     aria-label="প্রোফাইল মেনু"
-                    className="relative w-10 h-10 rounded-full p-0.5 bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-md hover:scale-105 transition-transform focus:outline-none"
+                    className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full p-0.5 bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-md hover:scale-105 transition-transform focus:outline-none shrink-0"
                   >
-                    <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center font-bold text-sm overflow-hidden">
+                    <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center font-bold text-xs sm:text-sm overflow-hidden">
                       {appUser.avatar_url ? (
                         <img
                           src={optimizeMedia(appUser.avatar_url)}
@@ -3535,104 +3785,114 @@ export default function App() {
                     <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0A2F25]" />
                   </button>
 
-                  {/* Modern Profile Popover Menu */}
+                  {/* Modern Profile Popover Menu (Auto-Closes on Outside Click or Scroll) */}
                   {headerProfileMenuOpen && (
-                    <>
-
-                      <div className="absolute right-0 mt-2.5 w-72 sm:w-80 rounded-3xl bg-white text-[#0A2F25] border-2 border-[#D4AF37]/60 shadow-2xl z-50 overflow-hidden animate-fadeIn">
-                        <div className="bg-gradient-to-r from-[#0A2F25] via-[#124A3B] to-[#0A2F25] p-4 text-white">
-                          <div className="flex items-center gap-3">
-                            <div className="relative w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-[#D4AF37] to-[#F3D568] shrink-0">
-                              <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center text-lg font-bold overflow-hidden">
-                                {appUser.avatar_url ? (
-                                  <img
-                                    src={optimizeMedia(appUser.avatar_url)}
-                                    alt={appUser.name}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <span>{appUser.name.charAt(0)}</span>
-                                )}
-                              </div>
-                              <label
-                                title="প্রোফাইল ছবি পরিবর্তন করুন"
-                                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#D4AF37] text-[#0A2F25] flex items-center justify-center shadow cursor-pointer hover:scale-110 transition-transform"
-                              >
-                                <Upload className="w-3 h-3" />
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={handleMyProfileAvatarUpload}
-                                  className="hidden"
+                    <div className="absolute right-0 mt-2.5 w-72 sm:w-80 rounded-3xl bg-white text-[#0A2F25] border-2 border-[#D4AF37]/60 shadow-2xl z-50 overflow-hidden animate-fadeIn">
+                      <div className="bg-gradient-to-r from-[#0A2F25] via-[#124A3B] to-[#0A2F25] p-4 text-white">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-[#D4AF37] to-[#F3D568] shrink-0">
+                            <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center text-lg font-bold overflow-hidden">
+                              {appUser.avatar_url ? (
+                                <img
+                                  src={optimizeMedia(appUser.avatar_url)}
+                                  alt={appUser.name}
+                                  className="w-full h-full object-cover"
                                 />
-                              </label>
+                              ) : (
+                                <span>{appUser.name.charAt(0)}</span>
+                              )}
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-bold text-sm sm:text-base text-white truncate">
-                                {appUser.name}
-                              </p>
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#D4AF37] text-[#0A2F25] mt-0.5">
-                                <ShieldCheck className="w-3 h-3" />
-                                <span>{appUser.designation || (appUser.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')}</span>
+                            <label
+                              title="প্রোফাইল ছবি পরিবর্তন করুন"
+                              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#D4AF37] text-[#0A2F25] flex items-center justify-center shadow cursor-pointer hover:scale-110 transition-transform"
+                            >
+                              <Upload className="w-3 h-3" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleMyProfileAvatarUpload}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-sm sm:text-base text-white truncate">
+                              {appUser.name}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-1 mt-1">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#D4AF37] text-[#0A2F25] whitespace-nowrap">
+                                {appUser.designation || (appUser.role === 'admin' ? 'অ্যাডমিন' : 'সাধারণ সদস্য')}
                               </span>
+                              {appUser.blood_group && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-english font-bold bg-red-600 text-white whitespace-nowrap">
+                                  {appUser.blood_group}
+                                </span>
+                              )}
+                              {appUser.age && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/15 text-[#F3D568] whitespace-nowrap">
+                                  বয়স: {appUser.age}
+                                </span>
+                              )}
                             </div>
                           </div>
-                        </div>
-
-                        <div className="p-4 space-y-2.5 text-xs border-b border-gray-100 bg-[#F4F7F5]/60">
-                          <div className="flex items-center gap-2 text-gray-700">
-                            <Mail className="w-3.5 h-3.5 text-[#155e4a] shrink-0" />
-                            <span className="font-english truncate">{appUser.email}</span>
-                          </div>
-                          {appUser.mobile && (
-                            <div className="flex items-center gap-2 text-gray-700">
-                              <Phone className="w-3.5 h-3.5 text-[#155e4a] shrink-0" />
-                              <span className="font-english">{appUser.mobile}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="p-3 space-y-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHeaderProfileMenuOpen(false);
-                              setActiveTab('my_profile');
-                              setCurrentView('dashboard');
-                            }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-[#0A2F25] hover:bg-[#0A2F25]/10 transition"
-                          >
-                            <User className="w-4 h-4 text-[#155e4a]" />
-                            <span>প্রোফাইল ও পাসওয়ার্ড আপডেট</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHeaderProfileMenuOpen(false);
-                              setActiveTab(appUser.role === 'admin' ? 'overview' : 'my_account');
-                              setCurrentView('dashboard');
-                            }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-[#0A2F25] hover:bg-[#0A2F25]/10 transition"
-                          >
-                            <LayoutDashboard className="w-4 h-4 text-[#155e4a]" />
-                            <span>ড্যাশবোর্ডে যান</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHeaderProfileMenuOpen(false);
-                              handleLogout();
-                            }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-red-600 hover:bg-red-50 transition"
-                          >
-                            <LogOut className="w-4 h-4" />
-                            <span>লগআউট করুন</span>
-                          </button>
                         </div>
                       </div>
-                    </>
+
+                      <div className="p-3.5 space-y-2 text-xs border-b border-gray-100 bg-[#F4F7F5]/60">
+                        {formatDisplayEmail(appUser.email) && (
+                          <div className="flex items-center gap-2 text-gray-700">
+                            <Mail className="w-3.5 h-3.5 text-[#155e4a] shrink-0" />
+                            <span className="font-english truncate">{formatDisplayEmail(appUser.email)}</span>
+                          </div>
+                        )}
+                        {appUser.mobile && (
+                          <div className="flex items-center gap-2 text-gray-700">
+                            <Phone className="w-3.5 h-3.5 text-[#155e4a] shrink-0" />
+                            <span className="font-english">{appUser.mobile}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-2.5 space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHeaderProfileMenuOpen(false);
+                            setActiveTab(appUser.role === 'admin' ? 'overview' : 'my_account');
+                            setCurrentView('dashboard');
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-full text-xs sm:text-sm font-bold text-[#0A2F25] hover:bg-[#0A2F25]/10 transition"
+                        >
+                          <LayoutDashboard className="w-4 h-4 text-[#155e4a] shrink-0" />
+                          <span>ড্যাশবোর্ডে যান</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHeaderProfileMenuOpen(false);
+                            setActiveTab('my_profile');
+                            setCurrentView('dashboard');
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-full text-xs sm:text-sm font-bold text-[#0A2F25] hover:bg-[#0A2F25]/10 transition"
+                        >
+                          <User className="w-4 h-4 text-[#155e4a] shrink-0" />
+                          <span>প্রোফাইল আপডেট</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHeaderProfileMenuOpen(false);
+                            handleLogout();
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-full text-xs sm:text-sm font-bold text-red-600 hover:bg-red-50 transition"
+                        >
+                          <LogOut className="w-4 h-4 shrink-0" />
+                          <span>লগআউট করুন</span>
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </>
@@ -4100,124 +4360,116 @@ export default function App() {
         {/* VIEW 2: PUBLIC MEMBERS VIEW (`members`)                            */}
         {/* ================================================================== */}
         {currentView === 'members' && (
-          <section className="max-w-7xl mx-auto px-3 sm:px-6 py-8 sm:py-12">
-            <div className="text-center max-w-2xl mx-auto mb-7">
-              <IslamicSectionDivider subtitle="আমাদের মানবিক পরিবার" />
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#0A2F25]">
-                নব আলো ফাউন্ডেশনের সদস্যবৃন্দ
-              </h2>
-              <p className="text-xs sm:text-sm text-gray-600 mt-1.5">
-                যেকোনো সদস্যের কার্ডে ক্লিক করে তার রক্তের গ্রুপ ও বিস্তারিত পরিচয় দেখুন
-              </p>
-            </div>
+          <div>
+            {/* Ultra-Compact Search & Blood Group Filter Strip Immediately Below Header */}
+            <div className="bg-white/95 backdrop-blur-md border-b border-gray-200 py-2 px-3 sm:px-6 sticky top-[54px] sm:top-[62px] z-20 shadow-sm">
+              <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+                {/* Compact Plain Search Input */}
+                <div className="relative w-full sm:w-64">
+                  <Users className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={memberSearchQuery}
+                    onChange={(e) => setMemberSearchQuery(e.target.value)}
+                    placeholder="সদস্যের নাম বা পদবি খুঁজুন..."
+                    className="w-full h-8 pl-8 pr-3 rounded-full border border-gray-200 bg-[#F4F7F5]/70 text-xs focus:outline-none focus:bg-white focus:border-[#0A2F25]"
+                  />
+                </div>
 
-            {/* Search & Blood Group Filter Bar */}
-            <div className="bg-white rounded-3xl p-4 border border-[#D4AF37]/40 shadow-sm mb-8 flex flex-col md:flex-row items-center justify-between gap-3">
-              <div className="relative w-full md:w-80">
-                <Users className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={memberSearchQuery}
-                  onChange={(e) => setMemberSearchQuery(e.target.value)}
-                  placeholder="নাম বা পদবি দিয়ে সদস্য খুঁজুন..."
-                  className="w-full pl-10 pr-4 py-2 rounded-full border border-gray-300 text-xs sm:text-sm focus:outline-none focus:border-[#0A2F25]"
-                />
-              </div>
-
-              <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 no-scrollbar">
-                <span className="text-xs font-bold text-[#0A2F25] mr-1 shrink-0">রক্তের গ্রুপ:</span>
-                {['সব', ...BLOOD_GROUPS].map((bg) => (
-                  <button
-                    key={bg}
-                    type="button"
-                    onClick={() => setSelectedBloodFilter(bg)}
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0 border ${
-                      selectedBloodFilter === bg
-                        ? 'bg-[#0A2F25] text-[#F3D568] border-[#D4AF37] shadow'
-                        : 'bg-[#F4F7F5] text-[#0A2F25] border-gray-200 hover:border-[#D4AF37]'
-                    }`}
-                  >
-                    {bg}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {filteredPublicMembers.length === 0 ? (
-              <div className="bg-white rounded-3xl p-12 text-center border border-[#D4AF37]/30 shadow-sm max-w-md mx-auto">
-                <Users className="w-12 h-12 text-[#D4AF37] mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">কোনো সদস্য খুঁজে পাওয়া যায়নি।</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                {filteredPublicMembers.map((member) => {
-                  // On public members page, everyone is equal — never expose 'অ্যাডমিন' role or shield icon!
-                  const rawDesig = (member.designation || '').trim();
-                  const publicDesignation =
-                    !rawDesig || rawDesig === 'অ্যাডমিন' ? 'সাধারণ সদস্য' : rawDesig;
-                  const avatarSrc = optimizeMedia(member.avatar_url);
-
-                  return (
-                    <div
-                      key={member.id}
-                      onClick={() => setSelectedMemberModal(member)}
-                      className="cursor-pointer group bg-white rounded-3xl overflow-hidden border border-[#D4AF37]/40 shadow-md hover:-translate-y-1 hover:shadow-xl transition-all flex flex-col items-center text-center relative"
+                {/* Compact Blood Group Pills */}
+                <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto pb-0.5 sm:pb-0 no-scrollbar">
+                  <span className="text-[11px] font-bold text-gray-500 mr-1 shrink-0">রক্তের গ্রুপ:</span>
+                  {['সব', ...BLOOD_GROUPS].map((bg) => (
+                    <button
+                      key={bg}
+                      type="button"
+                      onClick={() => setSelectedBloodFilter(bg)}
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-all shrink-0 border whitespace-nowrap ${
+                        selectedBloodFilter === bg
+                          ? 'bg-[#0A2F25] text-[#F3D568] border-[#D4AF37]'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-[#D4AF37]'
+                      }`}
                     >
-                      {/* Decorative Emerald & Gold Header */}
-                      <div className="w-full h-16 bg-gradient-to-r from-[#0A2F25] via-[#155e4a] to-[#0A2F25] border-b-2 border-[#D4AF37] relative" />
+                      {bg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-                      {/* Blood Group Pill on Top Right if available */}
-                      {member.blood_group && (
-                        <span className="absolute top-2.5 right-3 px-2.5 py-0.5 rounded-full bg-red-600 text-white font-english font-bold text-[11px] shadow-md">
-                          {member.blood_group}
-                        </span>
-                      )}
+            <section className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
+              <div className="text-center max-w-2xl mx-auto mb-6">
+                <IslamicSectionDivider subtitle="আমাদের মানবিক পরিবার" />
+                <h2 className="text-xl sm:text-3xl font-bold text-[#0A2F25]">
+                  নব আলো ফাউন্ডেশনের সদস্যবৃন্দ
+                </h2>
+              </div>
 
-                      {/* Circular Profile Photo or Initial */}
-                      <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#0A2F25] shadow-lg -mt-10 mb-3 relative z-10 group-hover:scale-105 transition-transform">
-                        {avatarSrc ? (
-                          <img
-                            src={avatarSrc}
-                            alt={member.name}
-                            loading="lazy"
-                            className="w-full h-full rounded-full object-cover bg-white"
-                          />
-                        ) : (
-                          <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center text-2xl font-bold">
-                            {member.name.charAt(0)}
-                          </div>
-                        )}
-                      </div>
+              {filteredPublicMembers.length === 0 ? (
+                <div className="bg-white rounded-3xl p-10 text-center border border-[#D4AF37]/30 shadow-sm max-w-md mx-auto">
+                  <Users className="w-10 h-10 text-[#D4AF37] mx-auto mb-2" />
+                  <p className="text-gray-500 text-xs sm:text-sm">কোনো সদস্য খুঁজে পাওয়া যায়নি।</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+                  {filteredPublicMembers.map((member) => {
+                    const rawDesig = (member.designation || '').trim();
+                    const publicDesignation =
+                      !rawDesig || rawDesig === 'অ্যাডমিন' ? 'সাধারণ সদস্য' : rawDesig;
+                    const avatarSrc = optimizeMedia(member.avatar_url);
 
-                      <div className="px-5 pb-5 flex-1 flex flex-col items-center justify-between w-full">
-                        <div>
-                          <h3 className="text-base sm:text-lg font-bold text-[#0A2F25] group-hover:text-[#155e4a] transition-colors leading-snug">
-                            {member.name}
-                          </h3>
+                    return (
+                      <div
+                        key={member.id}
+                        onClick={() => setSelectedMemberModal(member)}
+                        className="cursor-pointer group bg-white rounded-2xl sm:rounded-3xl overflow-hidden border border-[#D4AF37]/35 shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all flex flex-col items-center text-center relative"
+                      >
+                        <div className="w-full h-12 sm:h-15 bg-gradient-to-r from-[#0A2F25] via-[#155e4a] to-[#0A2F25] border-b border-[#D4AF37] relative" />
 
-                          {/* Uniform Designation Badge for All Members (No Admin Shield) */}
-                          <span className="mt-2 inline-flex items-center gap-1 px-4 py-1 rounded-full text-xs font-bold bg-[#F4F7F5] text-[#0A2F25] border border-[#D4AF37]/50">
-                            <span>{publicDesignation}</span>
+                        {member.blood_group && (
+                          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-red-600 text-white font-english font-bold text-[10px] shadow">
+                            {member.blood_group}
                           </span>
+                        )}
 
-                          {member.bio && (
-                            <p className="text-xs text-gray-500 mt-2 line-clamp-1">
-                              {member.bio}
-                            </p>
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full p-0.5 bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#0A2F25] shadow-md -mt-8 sm:-mt-10 mb-2 relative z-10 group-hover:scale-105 transition-transform">
+                          {avatarSrc ? (
+                            <img
+                              src={avatarSrc}
+                              alt={member.name}
+                              loading="lazy"
+                              className="w-full h-full rounded-full object-cover bg-white"
+                            />
+                          ) : (
+                            <div className="w-full h-full rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center text-lg sm:text-2xl font-bold">
+                              {member.name.charAt(0)}
+                            </div>
                           )}
                         </div>
 
-                        <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-[#155e4a] group-hover:text-[#0A2F25]">
-                          <span>বিস্তারিত দেখুন</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </span>
+                        <div className="px-3 pb-4 sm:px-5 sm:pb-5 flex-1 flex flex-col items-center justify-between w-full">
+                          <div>
+                            <h3 className="text-xs sm:text-base font-bold text-[#0A2F25] group-hover:text-[#155e4a] transition-colors leading-snug line-clamp-1">
+                              {member.name}
+                            </h3>
+
+                            <span className="mt-1.5 inline-flex items-center px-3 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-[#F4F7F5] text-[#0A2F25] border border-[#D4AF37]/40 whitespace-nowrap">
+                              <span>{publicDesignation}</span>
+                            </span>
+                          </div>
+
+                          <span className="mt-2.5 inline-flex items-center gap-0.5 text-[10px] sm:text-[11px] font-bold text-[#155e4a]">
+                            <span>বিস্তারিত</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
         )}
 
         {/* ================================================================== */}
@@ -4237,6 +4489,23 @@ export default function App() {
               </div>
 
               <form onSubmit={handleJoinSubmit} className="p-5 sm:p-7 space-y-4">
+                {/* Continue with Google Button */}
+                <button
+                  type="button"
+                  onClick={handleContinueWithGoogle}
+                  disabled={authLoading}
+                  className="w-full py-2.5 px-4 rounded-full bg-white hover:bg-gray-50 text-[#0A2F25] border-2 border-gray-200 hover:border-[#D4AF37] font-bold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all active:scale-95"
+                >
+                  <GoogleBrandIcon className="w-5 h-5 shrink-0" />
+                  <span>Continue with Google (গুগল দিয়ে চালিয়ে যান)</span>
+                </button>
+
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-gray-200" />
+                  <span className="flex-shrink mx-3 text-[11px] font-bold text-gray-400">অথবা</span>
+                  <div className="flex-grow border-t border-gray-200" />
+                </div>
+
                 {/* BOX 1: Full Name */}
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
@@ -4370,6 +4639,23 @@ export default function App() {
               </div>
 
               <form onSubmit={handleLoginSubmit} className="p-5 sm:p-7 space-y-4">
+                {/* Continue with Google Button */}
+                <button
+                  type="button"
+                  onClick={handleContinueWithGoogle}
+                  disabled={authLoading}
+                  className="w-full py-2.5 px-4 rounded-full bg-white hover:bg-gray-50 text-[#0A2F25] border-2 border-gray-200 hover:border-[#D4AF37] font-bold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all active:scale-95"
+                >
+                  <GoogleBrandIcon className="w-5 h-5 shrink-0" />
+                  <span>Continue with Google (গুগল দিয়ে চালিয়ে যান)</span>
+                </button>
+
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-gray-200" />
+                  <span className="flex-shrink mx-3 text-[11px] font-bold text-gray-400">অথবা</span>
+                  <div className="flex-grow border-t border-gray-200" />
+                </div>
+
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-[#0A2F25] mb-1">
                     ইমেইল অ্যাড্রেস অথবা মোবাইল নাম্বার *
@@ -4611,173 +4897,11 @@ export default function App() {
             {/* ============================================================== */}
             {appUser.role === 'admin' && activeTab === 'members' && (
               <div className="space-y-6">
-                {/* Quick Add Member via Facebook URL or Direct Form */}
-                <form
-                  onSubmit={handleQuickMemberSubmit}
-                  className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-[#D4AF37]/50 shadow-md space-y-4"
-                >
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-2xl bg-[#0A2F25] text-[#F3D568] flex items-center justify-center shadow">
-                        <UserPlus className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
-                          সরাসরি নতুন সদস্য যুক্ত করুন (Facebook URL / Quick Add)
-                        </h3>
-                        <p className="text-xs text-gray-500">
-                          ফেসবুক প্রোফাইল লিংক পেস্ট করে অথবা সরাসরি নাম, ছবি ও পদবী দিয়ে সদস্য যুক্ত করুন
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Facebook URL Input + Auto-Fetch Button */}
-                  <div className="flex flex-col sm:flex-row gap-2.5">
-                    <div className="relative flex-1">
-                      <Facebook className="w-4 h-4 text-[#155e4a] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="url"
-                        value={quickMemberForm.fb_url}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setQuickMemberForm((p) => ({ ...p, fb_url: val }));
-                        }}
-                        onBlur={(e) => {
-                          if (e.target.value.includes('facebook.com') && !quickMemberForm.name) {
-                            handleFetchFromFacebookUrl(e.target.value);
-                          }
-                        }}
-                        placeholder="ফেসবুক প্রোফাইল লিংক পেস্ট করুন (যেমন: https://facebook.com/username)"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      disabled={fetchingFbInfo}
-                      onClick={() => handleFetchFromFacebookUrl()}
-                      className="px-4 py-2.5 rounded-xl bg-[#124A3B] hover:bg-[#155e4a] text-[#F3D568] border border-[#D4AF37]/50 text-xs sm:text-sm font-bold shrink-0 transition"
-                    >
-                      {fetchingFbInfo ? 'আনা হচ্ছে...' : 'ফেসবুক থেকে নাম/ছবি আনুন'}
-                    </button>
-                  </div>
-
-                  {/* Name, Designation, Role, Sort Order & Photo Upload */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                    <div>
-                      <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                        সদস্যের নাম *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={quickMemberForm.name}
-                        onChange={(e) =>
-                          setQuickMemberForm((p) => ({ ...p, name: e.target.value }))
-                        }
-                        placeholder="সদস্যের পূর্ণ নাম"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                        পদবি / ক্যাটাগরি নির্বাচন করুন *
-                      </label>
-                      <select
-                        value={quickMemberForm.designation}
-                        onChange={(e) =>
-                          setQuickMemberForm((p) => ({ ...p, designation: e.target.value }))
-                        }
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white text-sm font-semibold text-[#0A2F25] focus:outline-none focus:border-[#0A2F25]"
-                      >
-                        {activeDesignations.map((desig) => (
-                          <option key={desig} value={desig}>
-                            {desig}
-                          </option>
-                        ))}
-                      </select>
-                      <datalist id="member-designations-datalist">
-                        {activeDesignations.map((desig) => (
-                          <option key={desig} value={desig} />
-                        ))}
-                      </datalist>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-[#0A2F25] mb-1">
-                        রোল ও ক্রমিক নং
-                      </label>
-                      <div className="flex gap-2">
-                        <select
-                          value={quickMemberForm.role}
-                          onChange={(e) => {
-                            const nextRole = e.target.value === 'admin' ? 'admin' : 'member';
-                            setQuickMemberForm((p) => ({
-                              ...p,
-                              role: nextRole,
-                              designation:
-                                p.designation === 'সাধারণ সদস্য' && nextRole === 'admin'
-                                  ? 'অ্যাডমিন'
-                                  : p.designation
-                            }));
-                          }}
-                          className="flex-1 px-3 py-2.5 rounded-xl border border-gray-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-[#0A2F25]"
-                        >
-                          <option value="member">সদস্য</option>
-                          <option value="admin">অ্যাডমিন</option>
-                        </select>
-                        <input
-                          type="number"
-                          value={quickMemberForm.sort_order}
-                          onChange={(e) =>
-                            setQuickMemberForm((p) => ({
-                              ...p,
-                              sort_order: Number(e.target.value)
-                            }))
-                          }
-                          title="ক্রমিক নাম্বার"
-                          className="w-20 px-2.5 py-2.5 rounded-xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-11 h-11 rounded-full bg-[#0A2F25] text-[#F3D568] flex items-center justify-center font-bold overflow-hidden border border-[#D4AF37] shrink-0">
-                        {quickMemberForm.avatar_url ? (
-                          <img
-                            src={optimizeMedia(quickMemberForm.avatar_url)}
-                            alt="Preview"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <User className="w-5 h-5" />
-                        )}
-                      </div>
-                      <label className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#F4F7F5] hover:bg-[#0A2F25] text-[#0A2F25] hover:text-[#F3D568] border border-[#D4AF37]/60 text-xs font-bold cursor-pointer transition">
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>ছবি আপলোড</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleQuickMemberPhotoUpload}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="btn-glossy-emerald inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#0A2F25] to-[#155e4a] text-[#F3D568] border border-[#D4AF37] font-bold text-sm shadow-md hover:opacity-95 transition"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>সদস্য তালিকায় যুক্ত করুন</span>
-                  </button>
-                </form>
+                
 
                 {/* Compact Collapsible Designation / Category CRUD Manager */}
                 <div className="bg-white rounded-2xl p-4 border border-[#D4AF37]/45 shadow-sm">
+                  <datalist id="member-designations-datalist">{activeDesignations.map((desig) => (<option key={desig} value={desig} />))}</datalist>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xs sm:text-sm font-bold text-[#0A2F25]">
@@ -5110,7 +5234,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <form onSubmit={handleCampaignSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+                  <form onSubmit={handleCampaignSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-bold text-[#0A2F25] mb-1">
                         প্রজেক্টের নাম *
@@ -5177,7 +5301,7 @@ export default function App() {
                         </button>
                       )}
                     </div>
-                    <div className="sm:col-span-5">
+                    <div className="sm:col-span-2">
                       <input
                         type="text"
                         value={campaignForm.description}
@@ -6360,6 +6484,19 @@ export default function App() {
 
                     <div>
                       <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                        বয়স (বছর)
+                      </label>
+                      <input
+                        type="text"
+                        value={profileAge}
+                        onChange={(e) => setProfileAge(e.target.value)}
+                        placeholder="যেমন: ২৪"
+                        className="w-full px-3.5 py-2.5 rounded-2xl border border-gray-300 text-sm focus:outline-none focus:border-[#0A2F25]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-[#0A2F25] mb-1">
                         রক্তের গ্রুপ (Blood Group)
                       </label>
                       <select
@@ -6563,7 +6700,102 @@ export default function App() {
       {/* ==================================================================== */}
       {/* 6. EDIT MEMBER MODAL (ADMIN)                                         */}
       {/* ==================================================================== */}
-            {/* PUBLIC MEMBER DETAIL POPUP MODAL (`selectedMemberModal`) */}
+                  {/* ONBOARDING & RECURRING BLOOD GROUP + AGE PROMPT MODAL (`showOnboardingModal`) */}
+      {showOnboardingModal && appUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <form
+            onSubmit={handleSaveOnboardingInfo}
+            className="bg-white rounded-3xl max-w-md w-full overflow-hidden border-2 border-[#D4AF37] shadow-2xl"
+          >
+            <div className="bg-gradient-to-r from-[#0A2F25] via-[#155e4a] to-[#0A2F25] p-5 text-center text-white">
+              <div className="w-12 h-12 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center mx-auto mb-2.5 text-[#F3D568]">
+                <HeartHandshake className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-white">প্রোফাইল তথ্য সম্পূর্ণ করুন</h3>
+              <p className="text-xs text-[#F3D568] mt-1 leading-relaxed">
+                {ONBOARDING_MESSAGES[onboardingMsgIdx]}
+              </p>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* 1-Tap Blood Group Selector Grid */}
+              <div>
+                <label className="block text-xs font-bold text-[#0A2F25] mb-2">
+                  ১. আপনার রক্তের গ্রুপ নির্বাচন করুন *
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {BLOOD_GROUPS.map((bg) => (
+                    <button
+                      key={bg}
+                      type="button"
+                      onClick={() => setOnboardingBlood(bg)}
+                      className={`py-2 rounded-full text-xs font-english font-bold border transition-all ${
+                        onboardingBlood === bg
+                          ? 'bg-red-600 text-white border-red-700 shadow-md scale-105'
+                          : 'bg-[#F4F7F5] text-[#0A2F25] border-gray-200 hover:border-[#D4AF37]'
+                      }`}
+                    >
+                      {bg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Age Input */}
+              <div>
+                <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                  ২. আপনার বয়স (বছর) *
+                </label>
+                <input
+                  type="number"
+                  min="10"
+                  max="100"
+                  required
+                  value={onboardingAge}
+                  onChange={(e) => setOnboardingAge(e.target.value)}
+                  placeholder="যেমন: ২৪"
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
+                />
+              </div>
+
+              {/* Mobile Input if missing (e.g. after Google Login) */}
+              {!appUser.mobile && (
+                <div>
+                  <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                    ৩. বাংলাদেশি মোবাইল নাম্বার (ঐচ্ছিক)
+                  </label>
+                  <input
+                    type="tel"
+                    value={onboardingMobile}
+                    onChange={(e) => setOnboardingMobile(e.target.value)}
+                    placeholder="017XXXXXXXX"
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-gray-300 text-sm font-english focus:outline-none focus:border-[#0A2F25]"
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={savingOnboarding}
+                  className="flex-1 py-2.5 px-5 rounded-full bg-gradient-to-r from-[#0A2F25] to-[#155e4a] text-[#F3D568] border border-[#D4AF37] font-bold text-xs sm:text-sm shadow-md hover:opacity-95 transition"
+                >
+                  {savingOnboarding ? 'সংরক্ষণ হচ্ছে...' : 'সংরক্ষণ করুন'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowOnboardingModal(false)}
+                  className="py-2.5 px-4 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-xs transition"
+                >
+                  এখন না, পরে দিবো
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* PUBLIC MEMBER DETAIL POPUP MODAL (`selectedMemberModal`) */}
       {selectedMemberModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn"
@@ -6605,6 +6837,13 @@ export default function App() {
             </div>
 
             <div className="p-6 space-y-3.5 text-sm">
+              {selectedMemberModal.age && (
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200">
+                  <span className="text-xs font-bold text-gray-600">বয়স</span>
+                  <span className="text-xs font-bold text-[#0A2F25]">{selectedMemberModal.age} বছর</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200">
                 <span className="text-xs font-bold text-gray-600">রক্তের গ্রুপ (Blood Group)</span>
                 {selectedMemberModal.blood_group ? (

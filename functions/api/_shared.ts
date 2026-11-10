@@ -78,6 +78,7 @@ async function ensureSchema(db: any) {
       sort_order INTEGER DEFAULT 100,
       promoted_by TEXT DEFAULT '',
       fb_url TEXT DEFAULT '',
+      age TEXT DEFAULT '',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS activities (
@@ -119,6 +120,7 @@ async function ensureSchema(db: any) {
     `ALTER TABLE site_settings ADD COLUMN campaigns TEXT DEFAULT '[]'`,
     `ALTER TABLE users ADD COLUMN blood_group TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN age TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN reminder_status TEXT DEFAULT 'auto'`,
     `ALTER TABLE users ADD COLUMN reminder_note TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN promoted_by TEXT DEFAULT ''`,
@@ -253,7 +255,7 @@ export const onRequest = async (context: any) => {
     if ((path === 'bootstrap' || path === '') && method === 'GET') {
       const [settingsRes, usersRes, actRes, finRes, ideasRes, galRes] = await db.batch([
         db.prepare('SELECT * FROM site_settings WHERE id = 1'),
-        db.prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, bio, reminder_status, reminder_note, created_at FROM users ORDER BY sort_order ASC'),
+        db.prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, bio, age, reminder_status, reminder_note, created_at FROM users ORDER BY sort_order ASC'),
         db.prepare('SELECT * FROM activities ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM finances ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM ideas ORDER BY created_at DESC'),
@@ -382,7 +384,7 @@ export const onRequest = async (context: any) => {
         .run();
 
       const user = await db
-        .prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, bio, reminder_status, reminder_note, created_at FROM users WHERE email = ?')
+        .prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, bio, age, reminder_status, reminder_note, created_at FROM users WHERE email = ?')
         .bind(email)
         .first();
 
@@ -441,6 +443,95 @@ export const onRequest = async (context: any) => {
       }
 
       const { password_hash, ...safeUser } = user;
+      return jsonResponse({ user: safeUser, ok: true });
+    }
+
+    
+    // 3B. POST /api/google-auth — Continue with Google OAuth Handler
+    if (path === 'google-auth' && method === 'POST') {
+      const body = await request.json();
+      let gEmail = String(body.email || '').trim().toLowerCase();
+      let gName = String(body.name || '').trim();
+      let gPicture = String(body.picture || body.avatar_url || '').trim();
+
+      // If access_token is provided by Google Identity Services tokenClient, verify via Google UserInfo API
+      if (body.access_token && !gEmail) {
+        const uRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${body.access_token}` }
+        });
+        if (uRes.ok) {
+          const uJson: any = await uRes.json();
+          gEmail = String(uJson.email || '').trim().toLowerCase();
+          gName = String(uJson.name || gEmail.split('@')[0] || '').trim();
+          gPicture = String(uJson.picture || '').trim();
+        }
+      }
+
+      // If authorization code is provided, exchange with GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET
+      if (body.code && !gEmail) {
+        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            code: String(body.code),
+            client_id: '55697442534-8qsn67qq9idh9q0accds2pngflitmhoo.apps.googleusercontent.com',
+            client_secret: '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',
+            redirect_uri: String(body.redirect_uri || url.origin),
+            grant_type: 'authorization_code'
+          })
+        });
+        if (tokenRes.ok) {
+          const tokenData: any = await tokenRes.json();
+          if (tokenData.access_token) {
+            const uRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${tokenData.access_token}` }
+            });
+            if (uRes.ok) {
+              const uJson: any = await uRes.json();
+              gEmail = String(uJson.email || '').trim().toLowerCase();
+              gName = String(uJson.name || gEmail.split('@')[0] || '').trim();
+              gPicture = String(uJson.picture || '').trim();
+            }
+          }
+        }
+      }
+
+      if (!gEmail) {
+        return jsonResponse({ error: 'গুগল থেকে ইমেইল তথ্য পাওয়া যায়নি।' }, 400);
+      }
+
+      const isSuper = gEmail === SUPER_ADMIN_EMAIL.toLowerCase();
+      let existingUser = await db.prepare('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1').bind(gEmail).first();
+
+      if (!existingUser) {
+        const id = isSuper ? 'super-admin-raihan' : crypto.randomUUID();
+        const role = isSuper ? 'admin' : 'member';
+        const status = 'approved';
+        const designation = isSuper ? 'অ্যাডমিন' : 'সাধারণ সদস্য';
+        const sort_order = isSuper ? 1 : 100;
+
+        await db
+          .prepare(
+            `INSERT INTO users (id, name, email, mobile, password_hash, avatar_url, role, status, designation, sort_order)
+             VALUES (?, ?, ?, '', '', ?, ?, ?, ?, ?)`
+          )
+          .bind(id, gName || 'সদস্য', gEmail, gPicture, role, status, designation, sort_order)
+          .run();
+
+        existingUser = await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
+      } else {
+        if (gPicture && !existingUser.avatar_url) {
+          await db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').bind(gPicture, existingUser.id).run();
+          existingUser.avatar_url = gPicture;
+        }
+        if (isSuper && (existingUser.role !== 'admin' || existingUser.status !== 'approved')) {
+          await db.prepare("UPDATE users SET role = 'admin', status = 'approved' WHERE id = ?").bind(existingUser.id).run();
+          existingUser.role = 'admin';
+          existingUser.status = 'approved';
+        }
+      }
+
+      const { password_hash, ...safeUser } = existingUser;
       return jsonResponse({ user: safeUser, ok: true });
     }
 
@@ -576,6 +667,7 @@ export const onRequest = async (context: any) => {
                fb_url = COALESCE(?, fb_url),
                blood_group = COALESCE(?, blood_group),
                bio = COALESCE(?, bio),
+               age = COALESCE(?, age),
                reminder_status = COALESCE(?, reminder_status),
                reminder_note = COALESCE(?, reminder_note),
                password_hash = COALESCE(?, password_hash)
@@ -594,6 +686,7 @@ export const onRequest = async (context: any) => {
           body.fb_url ?? null,
           body.blood_group ?? null,
           body.bio ?? null,
+          body.age ?? null,
           body.reminder_status ?? null,
           body.reminder_note ?? null,
           pwHash,
