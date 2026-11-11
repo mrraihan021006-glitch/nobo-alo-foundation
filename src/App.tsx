@@ -22,6 +22,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Play,
   ShieldCheck,
   Sparkles,
@@ -148,6 +150,31 @@ const writeLocalJson = (key: string, value: unknown): void => {
   } catch {
     // Ignore quota errors
   }
+};
+
+
+// Formats any date string (e.g., "2026-07-29") into "29 Jul 2026" (Day -> Month Name -> Year)
+const formatActivityDate = (dateStr?: string | null): string => {
+  if (!dateStr) return '';
+  const trimmed = String(dateStr).trim();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const isoMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (isoMatch) {
+    const year = isoMatch[1];
+    const monthIdx = parseInt(isoMatch[2], 10) - 1;
+    const day = String(parseInt(isoMatch[3], 10)).padStart(2, '0');
+    if (monthIdx >= 0 && monthIdx < 12) {
+      return `${day} ${months[monthIdx]} ${year}`;
+    }
+  }
+  const dt = new Date(trimmed);
+  if (!isNaN(dt.getTime())) {
+    const day = String(dt.getDate()).padStart(2, '0');
+    const mon = months[dt.getMonth()];
+    const yr = dt.getFullYear();
+    return `${day} ${mon} ${yr}`;
+  }
+  return trimmed;
 };
 
 const checkIsComingSoon = (is_coming_soon?: boolean, activity_date?: string | null): boolean => {
@@ -990,6 +1017,162 @@ const WhiteCircularLogo: React.FC<{
   );
 };
 
+
+// Auto-Sliding Activity Card Component (Multiple Images Auto-Slide with Smooth Dots, No 1/N Badge, No Top Gradient Line)
+const ActivityCardItem: React.FC<{
+  act: ActivityItem;
+  onSelect: (act: ActivityItem) => void;
+}> = ({ act, onSelect }) => {
+  const validMedia = useMemo(
+    () => (Array.isArray(act.media) ? act.media.filter(Boolean) : []),
+    [act.media]
+  );
+  const [slideIdx, setSlideIdx] = useState(0);
+
+  useEffect(() => {
+    setSlideIdx(0);
+  }, [validMedia.length]);
+
+  useEffect(() => {
+    if (validMedia.length <= 1) return;
+    const activeUrl = validMedia[slideIdx] || '';
+    if (isMediaVideo(activeUrl)) return;
+    const timer = setInterval(() => {
+      setSlideIdx((prev) => (prev + 1) % validMedia.length);
+    }, 3400);
+    return () => clearInterval(timer);
+  }, [validMedia, slideIdx]);
+
+  const currentMedia = validMedia[slideIdx] || '';
+  const isVideo = isMediaVideo(currentMedia);
+  const showComingSoon = checkIsComingSoon(act.is_coming_soon, act.activity_date);
+  const formattedDate = formatActivityDate(act.activity_date);
+
+  return (
+    <article
+      onClick={() => onSelect(act)}
+      className="break-inside-avoid group cursor-pointer bg-white/95 backdrop-blur-md rounded-3xl p-2.5 pb-4 border border-gray-200/90 hover:border-[#D4AF37]/70 shadow-[0_10px_30px_-12px_rgba(10,47,37,0.14)] hover:-translate-y-1 hover:shadow-[0_22px_44px_-15px_rgba(10,47,37,0.24)] transition-all duration-300 flex flex-col"
+    >
+      {/* Framed Rounded Media Container with Auto-Sliding Carousel */}
+      <div className="relative w-full h-52 sm:h-60 rounded-2xl overflow-hidden bg-[#0A2F25]">
+        {validMedia.length > 0 ? (
+          validMedia.map((mediaUrl, idx) => {
+            const active = idx === slideIdx;
+            const mediaIsVid = isMediaVideo(mediaUrl);
+            return (
+              <div
+                key={`${mediaUrl}-${idx}`}
+                className={`absolute inset-0 transition-all duration-700 ease-in-out ${
+                  active ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-105 z-0 pointer-events-none'
+                }`}
+              >
+                {mediaIsVid ? (
+                  <div className="relative w-full h-full">
+                    <video
+                      src={optimizeMedia(mediaUrl)}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                    />
+                    <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+                      <div className="w-11 h-11 rounded-full bg-[#0A2F25]/90 border border-[#D4AF37] text-[#F3D568] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                        <Play className="w-4 h-4 fill-current ml-0.5" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={optimizeMedia(mediaUrl)}
+                    alt={act.title}
+                    loading="lazy"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                  />
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-[#0A2F25] to-[#155e4a] flex items-center justify-center">
+            <HeartHandshake className="w-11 h-11 text-[#D4AF37]/60" />
+          </div>
+        )}
+
+        {/* Subtle Bottom Vignette Inside Image for Dot Visibility */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-16 pointer-events-none z-10"
+          style={{ background: 'linear-gradient(to top, rgba(5,24,19,0.65), transparent)' }}
+        />
+
+        {/* Category Badge (Top Left) */}
+        <span className="absolute top-3 left-3 z-20 px-3 py-1 rounded-full text-[11px] font-bold bg-[#0A2F25]/85 text-[#F3D568] border border-[#D4AF37]/50 backdrop-blur-md shadow-sm">
+          {act.category || 'সাধারণ'}
+        </span>
+
+        {/* Formatted Date ("29 Jul 2026") or Coming Soon Badge (Top Right) */}
+        <div className="absolute top-3 right-3 z-20">
+          {showComingSoon ? (
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] shadow-md">
+              <Clock className="w-3 h-3" />
+              <span>শীঘ্রই আসছে</span>
+            </span>
+          ) : formattedDate ? (
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-semibold bg-white/95 text-[#0A2F25] border border-gray-200/80 shadow-sm font-english">
+              <Calendar className="w-3 h-3 text-[#155e4a]" />
+              <span>{formattedDate}</span>
+            </span>
+          ) : null}
+        </div>
+
+        {/* Animated Pagination Dots at Bottom Center (Replaces Old 1/N Text Badge) */}
+        {validMedia.length > 1 && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/15"
+          >
+            {validMedia.map((_, dotIdx) => (
+              <button
+                key={dotIdx}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSlideIdx(dotIdx);
+                }}
+                aria-label={`Slide ${dotIdx + 1}`}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  dotIdx === slideIdx ? 'w-5 bg-[#D4AF37]' : 'w-1.5 bg-white/60 hover:bg-white'
+                }`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Card Body */}
+      <div className="px-2.5 pt-3.5 flex-1 flex flex-col justify-between">
+        <div>
+          <h3 className="text-base sm:text-lg font-bold text-[#0A2F25] group-hover:text-[#155e4a] transition-colors mb-1.5 leading-snug">
+            {act.title}
+          </h3>
+          <p className="text-xs sm:text-sm text-gray-600 line-clamp-3 leading-relaxed">
+            {act.description}
+          </p>
+        </div>
+
+        <div className="mt-3.5 pt-2.5 border-t border-gray-100 flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 text-xs font-english font-bold text-[#155e4a] group-hover:text-[#0A2F25] transition-colors">
+            <span>See More</span>
+          </span>
+          <span className="w-7 h-7 rounded-full bg-[#0A2F25]/8 group-hover:bg-[#0A2F25] text-[#0A2F25] group-hover:text-[#F3D568] flex items-center justify-center transition-all">
+            <ChevronRight className="w-3.5 h-3.5" />
+          </span>
+        </div>
+      </div>
+    </article>
+  );
+};
+
 const ActivitySlider: React.FC<{ mediaList: string[]; title: string }> = ({ mediaList, title }) => {
   const validMedia = useMemo(
     () => (mediaList && mediaList.length > 0 ? mediaList.filter(Boolean) : []),
@@ -1287,6 +1470,29 @@ export default function App() {
 
   // Hero Banner Slideshow Index (cycles every 5s through valid URLs in siteSettings.banners)
   const [bannerIndex, setBannerIndex] = useState(0);
+  const [isPageScrolled, setIsPageScrolled] = useState(false);
+  const [quoteIndex, setQuoteIndex] = useState(0);
+
+  const INSPIRATIONAL_FLOATING_QUOTES = [
+    'মানুষ মানুষের জন্য — ক্ষুদ্র প্রচেষ্টায় ফোটুক হাসি',
+    'দান কখনো সম্পদ কমায় না, বরং বরকত বৃদ্ধি করে',
+    'অসহায়ের মুখে হাসি ফোটানোই সর্বশ্রেষ্ঠ মানবিকতা'
+  ];
+
+  useEffect(() => {
+    const onScroll = () => {
+      setIsPageScrolled(window.scrollY > 24);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    const qTimer = setInterval(() => {
+      setQuoteIndex((prev) => (prev + 1) % INSPIRATIONAL_FLOATING_QUOTES.length);
+    }, 4500);
+    return () => clearInterval(qTimer);
+  }, []);
   const validBanners = useMemo(() => {
     return (siteSettings.banners || []).filter((b) => b && b.trim() !== '');
   }, [siteSettings.banners]);
@@ -3677,9 +3883,15 @@ export default function App() {
         </div>
       </div>
 
-      {/* 2. MOBILE-FIRST HEADER / NAVBAR (100% MOBILE RESPONSIVE, ZERO TEXT BREAKING) */}
-      <header className="sticky top-0 z-30 bg-[#0A2F25]/95 backdrop-blur-lg border-b border-[#D4AF37]/45 shadow-[0_8px_30px_rgba(10,47,37,0.28)]">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 relative">
+      {/* 2. SMART SCROLL-COMPACT FROSTED GLASS HEADER / NAVBAR */}
+      <header
+        className={`sticky top-0 z-30 transition-all duration-300 ${
+          isPageScrolled
+            ? 'bg-[#0A2F25]/82 backdrop-blur-xl border-b border-[#D4AF37]/35 shadow-[0_8px_32px_rgba(5,24,19,0.38)] py-1.5'
+            : 'bg-[#0A2F25]/95 backdrop-blur-md border-b border-[#D4AF37]/45 shadow-[0_6px_24px_rgba(10,47,37,0.24)] py-2.5'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center justify-between gap-2 relative">
           {/* Left Side: Circular White-BG Logo + Unbreakable Single-Line Site Name */}
           <button
             type="button"
@@ -3956,81 +4168,94 @@ export default function App() {
         {/* ================================================================== */}
         {currentView === 'home' && (
           <div>
-            {/* A. COMPACT MOBILE-FIRST HERO SECTION (TINY SUBTLE MANDALAS & VIVID BANNER SHOWCASE) */}
-            <section className="relative overflow-hidden bg-[#0A2F25] text-white min-h-[260px] sm:min-h-[420px] flex flex-col items-center justify-center py-6 sm:py-14 px-3 sm:px-6 border-b-2 border-[#D4AF37]">
-              {/* Vivid Fading Background Banner Slideshow */}
+            {/* A. COMPACT HERO WITH SOFT BANNER OPACITY, RADIAL VINTAGE BLUR & FLOATING INSPIRATIONAL PILLS */}
+            <section className="relative overflow-hidden bg-[#07221B] text-white min-h-[250px] sm:min-h-[400px] flex flex-col items-center justify-center py-6 sm:py-12 px-3 sm:px-6 border-b border-[#D4AF37]/60">
+              {/* Softly Visible Fading Background Banner Slideshow (Lower Opacity + Subtle Blur) */}
               {validBanners.map((bannerUrl, idx) => (
                 <div
                   key={idx}
-                  className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                    idx === bannerIndex ? 'opacity-65' : 'opacity-0'
+                  className={`absolute inset-0 transition-all duration-1000 ease-in-out ${
+                    idx === bannerIndex ? 'opacity-25 scale-105' : 'opacity-0 scale-100'
                   }`}
                   style={{
                     backgroundImage: `url("${optimizeMedia(bannerUrl)}")`,
                     backgroundSize: 'cover',
-                    backgroundPosition: 'center'
+                    backgroundPosition: 'center',
+                    filter: 'blur(1.5px)'
                   }}
                 />
               ))}
 
-              {/* Balanced Translucent Overlay so Background Banner Shines Clearly */}
+              {/* Deep Radial Vignette & Vintage Side Blur Overlay */}
               <div
-                className="absolute inset-0"
+                className="absolute inset-0 pointer-events-none"
                 style={{
                   background:
-                    validBanners.length > 0
-                      ? 'radial-gradient(circle at 50% 45%, rgba(10,47,37,0.48) 0%, rgba(10,47,37,0.76) 72%, rgba(5,24,19,0.88) 100%)'
-                      : 'radial-gradient(circle at 50% 42%, rgba(21,94,74,0.65) 0%, rgba(10,47,37,0.92) 70%, rgba(5,24,19,0.98) 100%)'
+                    'radial-gradient(circle at 50% 45%, rgba(10,47,37,0.52) 0%, rgba(8,36,28,0.84) 62%, rgba(4,19,15,0.97) 100%)',
+                  boxShadow: 'inset 0 0 85px 28px rgba(4, 19, 15, 0.88)'
                 }}
               />
+              {/* Left & Right Frosted Vintage Edge Blur Strips */}
+              <div className="hidden sm:block absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[#051A14]/90 to-transparent backdrop-blur-[2px] pointer-events-none" />
+              <div className="hidden sm:block absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#051A14]/90 to-transparent backdrop-blur-[2px] pointer-events-none" />
 
-              {/* Small, Subtle Corner Mandalas (110px on Mobile so they never crowd the Banner!) */}
-              <div className="absolute -left-8 -top-8 opacity-15 pointer-events-none">
-                <IslamicMandala className="animate-mandala" size={120} />
+              {/* Tiny, Subtle Corner Mandalas */}
+              <div className="absolute -left-10 -top-10 opacity-12 pointer-events-none">
+                <IslamicMandala className="animate-mandala" size={110} />
               </div>
-              <div className="absolute -right-8 -bottom-8 opacity-15 pointer-events-none">
-                <IslamicMandala className="animate-mandala-reverse" size={130} />
+              <div className="absolute -right-10 -bottom-10 opacity-12 pointer-events-none">
+                <IslamicMandala className="animate-mandala-reverse" size={115} />
+              </div>
+
+              {/* Floating Inspirational Glass Cards on Desktop Sides */}
+              <div className="hidden lg:flex items-center gap-2 absolute left-8 top-1/3 px-3.5 py-2 rounded-2xl bg-white/8 backdrop-blur-md border border-[#D4AF37]/30 text-[11px] text-[#F3D568] shadow-lg animate-float-slow pointer-events-none max-w-[210px]">
+                <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+                <span>ক্ষুদ্র দানে ফোটুক অসহায়ের মুখে হাসি</span>
+              </div>
+              <div className="hidden lg:flex items-center gap-2 absolute right-8 bottom-1/3 px-3.5 py-2 rounded-2xl bg-white/8 backdrop-blur-md border border-[#D4AF37]/30 text-[11px] text-[#F3D568] shadow-lg animate-float-delayed pointer-events-none max-w-[210px]">
+                <HeartHandshake className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+                <span>মানবতার সেবায় ঐক্যবদ্ধ পথচলা</span>
               </div>
 
               {/* Compact Hero Center Content */}
               <div className="relative z-10 max-w-2xl mx-auto text-center flex flex-col items-center">
                 {/* Compact Circular Logo */}
-                <div className="relative mb-2.5 sm:mb-4 flex items-center justify-center">
-                  <div className="relative p-1 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-[0_0_25px_rgba(212,175,55,0.4)]">
+                <div className="relative mb-2 sm:mb-3.5 flex items-center justify-center">
+                  <div className="relative p-1 rounded-full bg-gradient-to-tr from-[#D4AF37] via-[#F3D568] to-[#D4AF37] shadow-[0_0_24px_rgba(212,175,55,0.38)]">
                     <WhiteCircularLogo
                       logoUrl={siteSettings.logo_url}
-                      sizeClass="w-14 h-14 sm:w-20 sm:h-20"
+                      sizeClass="w-12 h-12 sm:w-18 sm:h-18"
                     />
                   </div>
                 </div>
 
-                {/* Compact Golden Filigree Pill Badge */}
-                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 sm:px-4 sm:py-1 rounded-full bg-black/25 backdrop-blur-md border border-[#D4AF37]/50 text-[#F3D568] text-[10px] sm:text-xs font-semibold mb-2 sm:mb-3">
+                {/* Floating Inspirational Advice Pill (Cycles Softly) */}
+                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 sm:px-3.5 sm:py-1 rounded-full bg-white/10 backdrop-blur-md border border-[#D4AF37]/40 text-[#F3D568] text-[10px] sm:text-xs font-medium mb-2 transition-all duration-500">
                   <Sparkles className="w-3 h-3 text-[#D4AF37] shrink-0" />
-                  <span>মানবতা, ভ্রাতৃত্ব ও কল্যাণের অঙ্গীকার</span>
+                  <span>{INSPIRATIONAL_FLOATING_QUOTES[quoteIndex]}</span>
                 </div>
 
-                <h1 className="text-lg sm:text-3xl md:text-4xl font-bold text-white leading-snug mb-1.5 sm:mb-3 drop-shadow-md">
+                <h1 className="text-lg sm:text-3xl md:text-4xl font-bold text-white leading-snug mb-1.5 sm:mb-2.5 drop-shadow-md">
                   মানবতার সেবায় {siteSettings.site_name || DEFAULT_SITE_NAME}
                 </h1>
 
-                <p className="text-xs sm:text-base text-gray-100 max-w-xl mb-4 sm:mb-6 leading-relaxed drop-shadow">
+                <p className="text-xs sm:text-sm md:text-base text-gray-200 max-w-lg mb-4 sm:mb-5 leading-relaxed">
                   {siteSettings.tagline || DEFAULT_TAGLINE}
                 </p>
 
-                <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3.5">
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
                   <button
                     type="button"
                     onClick={() => setCurrentView('join')}
-                    className="btn-glossy-gold inline-flex items-center gap-1.5 px-5 py-2 sm:px-7 sm:py-3 rounded-full bg-gradient-to-r from-[#D4AF37] via-[#F3D568] to-[#D4AF37] text-[#0A2F25] font-bold text-xs sm:text-sm shadow-lg hover:scale-[1.02] active:scale-95 transition-all whitespace-nowrap"
+                    className="btn-glossy-gold inline-flex items-center gap-1.5 px-4 py-2 sm:px-6 sm:py-2.5 rounded-full bg-gradient-to-r from-[#D4AF37] via-[#F3D568] to-[#D4AF37] text-[#0A2F25] font-bold text-xs sm:text-sm shadow-md hover:scale-[1.02] active:scale-95 transition-all whitespace-nowrap"
                   >
-                    <UserPlus className="w-4 h-4 shrink-0" />
+                    <UserPlus className="w-3.5 h-3.5 shrink-0" />
                     <span>সদস্য হিসেবে যুক্ত হোন</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setCurrentView('members')}
-                    className="inline-flex items-center gap-1.5 px-5 py-2 sm:px-6 sm:py-3 rounded-full bg-black/30 hover:bg-black/45 backdrop-blur-md text-white border border-[#D4AF37]/60 font-semibold text-xs sm:text-sm transition-all whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 sm:px-6 sm:py-2.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-[#D4AF37]/50 font-semibold text-xs sm:text-sm transition-all whitespace-nowrap"
                   >
                     <Users className="w-3.5 h-3.5 text-[#F3D568] shrink-0" />
                     <span>সদস্যবৃন্দ দেখুন</span>
@@ -4038,7 +4263,7 @@ export default function App() {
                 </div>
 
                 {validBanners.length > 1 && (
-                  <div className="mt-4 sm:mt-6 flex items-center gap-1.5">
+                  <div className="mt-4 sm:mt-5 flex items-center gap-1.5">
                     {validBanners.map((_, i) => (
                       <button
                         key={i}
@@ -4046,7 +4271,7 @@ export default function App() {
                         onClick={() => setBannerIndex(i)}
                         aria-label={`ব্যানার ${i + 1}`}
                         className={`h-1.5 rounded-full transition-all ${
-                          i === bannerIndex ? 'w-6 bg-[#D4AF37]' : 'w-1.5 bg-white/40'
+                          i === bannerIndex ? 'w-5 bg-[#D4AF37]' : 'w-1.5 bg-white/35'
                         }`}
                       />
                     ))}
@@ -4167,104 +4392,14 @@ export default function App() {
                   </p>
                 </div>
               ) : (
-                <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-6">
-                  {filteredActivities.map((act) => {
-                    const firstMedia = act.media && act.media.length > 0 ? act.media[0] : '';
-                    const isVideo = isMediaVideo(firstMedia);
-                    const showComingSoon = checkIsComingSoon(act.is_coming_soon, act.activity_date);
-
-                    return (
-                      <article
-                        key={act.id}
-                        onClick={() => setSelectedActivityModal(act)}
-                        className="break-inside-avoid group cursor-pointer bg-white rounded-3xl overflow-hidden border border-[#D4AF37]/35 shadow-md hover:-translate-y-1 hover:shadow-[0_20px_40px_-15px_rgba(10,47,37,0.22)] transition-all duration-300 flex flex-col"
-                      >
-                        <div className="h-1.5 w-full bg-gradient-to-r from-[#0A2F25] via-[#D4AF37] to-[#155e4a]" />
-
-                        {/* Media Thumbnail Container */}
-                        <div className="relative w-full overflow-hidden bg-[#0A2F25]">
-                          {firstMedia ? (
-                            isVideo ? (
-                              <div className="relative w-full h-52 sm:h-60">
-                                <video
-                                  src={optimizeMedia(firstMedia)}
-                                  autoPlay
-                                  muted
-                                  loop
-                                  playsInline
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                                />
-                                <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
-                                  <div className="w-12 h-12 rounded-full bg-[#0A2F25]/90 border-2 border-[#D4AF37] text-[#F3D568] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                    <Play className="w-5 h-5 fill-current ml-0.5" />
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <img
-                                src={optimizeMedia(firstMedia)}
-                                alt={act.title}
-                                loading="lazy"
-                                className="w-full h-52 sm:h-60 object-cover group-hover:scale-105 transition-transform duration-700"
-                              />
-                            )
-                          ) : (
-                            <div className="w-full h-44 bg-gradient-to-br from-[#0A2F25] to-[#155e4a] flex items-center justify-center">
-                              <HeartHandshake className="w-12 h-12 text-[#D4AF37]/60" />
-                            </div>
-                          )}
-
-                          {/* Category Badge */}
-                          <span className="absolute top-3 left-3 px-3.5 py-1 rounded-full text-xs font-bold bg-[#0A2F25]/90 text-[#F3D568] border border-[#D4AF37]/60 backdrop-blur-sm shadow">
-                            {act.category || 'সাধারণ'}
-                          </span>
-
-                          {/* Smart "Coming Soon" & Date Badge Logic */}
-                          <div className="absolute top-3 right-3">
-                            {showComingSoon ? (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-[#D4AF37] to-[#F3D568] text-[#0A2F25] shadow-md">
-                                <Clock className="w-3.5 h-3.5" />
-                                <span>শীঘ্রই আসছে</span>
-                              </span>
-                            ) : act.activity_date ? (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-white/95 text-[#0A2F25] border border-[#D4AF37]/50 shadow font-english">
-                                <Calendar className="w-3.5 h-3.5 text-[#155e4a]" />
-                                <span>{act.activity_date}</span>
-                              </span>
-                            ) : null}
-                          </div>
-
-                          {act.media && act.media.length > 1 && (
-                            <span className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[11px] font-english font-semibold bg-black/75 text-[#F3D568] border border-[#D4AF37]/40 backdrop-blur-sm">
-                              1/{act.media.length}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Card Body */}
-                        <div className="p-5 flex-1 flex flex-col justify-between">
-                          <div>
-                            <h3 className="text-base sm:text-lg font-bold text-[#0A2F25] group-hover:text-[#155e4a] transition-colors mb-2 leading-snug">
-                              {act.title}
-                            </h3>
-                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-3 leading-relaxed">
-                              {act.description}
-                            </p>
-                          </div>
-
-                          <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-[#0A2F25]">
-                            <span className="inline-flex items-center gap-1.5 group-hover:text-[#155e4a] transition-colors">
-                              <Eye className="w-4 h-4 text-[#D4AF37]" />
-                              <span>বিস্তারিত ও মিডিয়া দেখুন</span>
-                            </span>
-                            <span className="w-7 h-7 rounded-full bg-[#0A2F25]/5 group-hover:bg-[#0A2F25] group-hover:text-[#F3D568] flex items-center justify-center transition-all">
-                              <ChevronRight className="w-4 h-4" />
-                            </span>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
+                <div className="columns-1 sm:columns-2 lg:columns-3 gap-5 space-y-5">
+                  {filteredActivities.map((act) => (
+                    <ActivityCardItem
+                      key={act.id}
+                      act={act}
+                      onSelect={(selected) => setSelectedActivityModal(selected)}
+                    />
+                  ))}
                 </div>
               )}
             </section>
@@ -4906,9 +5041,15 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setShowDesignationManager((p) => !p)}
-                      className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-[#0A2F25]/10 hover:bg-[#0A2F25] text-[#0A2F25] hover:text-[#F3D568] text-xs font-bold transition"
+                      aria-label="পদবি তালিকা খুলুন বা বন্ধ করুন"
+                      title={showDesignationManager ? 'সংক্ষিপ্ত করুন' : 'পদবি অ্যাড / এডিট'}
+                      className="w-8 h-8 rounded-full bg-[#0A2F25]/10 hover:bg-[#0A2F25] text-[#0A2F25] hover:text-[#F3D568] flex items-center justify-center transition shrink-0"
                     >
-                      <span>{showDesignationManager ? 'সংক্ষিপ্ত করুন' : 'পদবি অ্যাড / এডিট করুন'}</span>
+                      {showDesignationManager ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
 
@@ -5001,11 +5142,15 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => setShowAllDesignations((p) => !p)}
-                            className="px-3 py-1 rounded-full bg-[#D4AF37]/20 text-[#0A2F25] border border-[#D4AF37]/50 text-xs font-bold hover:bg-[#D4AF37]/30 transition"
+                            title={showAllDesignations ? 'কম দেখুন' : 'আরও দেখুন'}
+                            aria-label="আরও পদবি দেখুন"
+                            className="w-7 h-7 rounded-full bg-[#D4AF37]/25 hover:bg-[#D4AF37] text-[#0A2F25] border border-[#D4AF37]/50 flex items-center justify-center transition shrink-0"
                           >
-                            {showAllDesignations
-                              ? 'সংক্ষিপ্ত করুন'
-                              : `আরও দেখুন (+${activeDesignations.length - 6}টি)`}
+                            {showAllDesignations ? (
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            )}
                           </button>
                         )}
                       </div>
@@ -6602,11 +6747,11 @@ export default function App() {
       {selectedActivityModal && (
         <div
           onClick={() => setSelectedActivityModal(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#0A2F25]/85 backdrop-blur-md overflow-y-auto animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#041510]/80 backdrop-blur-md overflow-y-auto no-scrollbar animate-fadeIn"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white/95 backdrop-blur-xl rounded-3xl max-w-2xl w-full p-4 sm:p-6 border-2 border-[#D4AF37] shadow-2xl my-auto max-h-[92vh] overflow-y-auto"
+            className="bg-white/95 backdrop-blur-xl rounded-3xl max-w-2xl w-full p-4 sm:p-6 border border-[#D4AF37]/80 shadow-2xl my-auto max-h-[90vh] overflow-y-auto no-scrollbar"
           >
             <div className="flex items-start justify-between gap-3 mb-4">
               <div className="flex items-center gap-2 flex-wrap">
@@ -6621,8 +6766,9 @@ export default function App() {
                     শীঘ্রই আসছে
                   </span>
                 ) : selectedActivityModal.activity_date ? (
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-[#0A2F25] font-english">
-                    {selectedActivityModal.activity_date}
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-[#0A2F25] font-english">
+                    <Calendar className="w-3.5 h-3.5 text-[#155e4a]" />
+                    <span>{formatActivityDate(selectedActivityModal.activity_date)}</span>
                   </span>
                 ) : null}
               </div>
