@@ -319,6 +319,38 @@ interface FundCampaign {
   created_at?: string;
 }
 
+interface PaymentMethodItem {
+  id: string;
+  provider: 'bKash' | 'Nagad' | 'Rocket';
+  number: string;
+  account_type: string;
+  note?: string;
+  is_active?: boolean;
+}
+
+interface PaymentSubmission {
+  id: string;
+  member_id?: string;
+  sender_name: string;
+  provider: 'bKash' | 'Nagad' | 'Rocket';
+  amount: number;
+  sender_number: string;
+  receiver_number?: string;
+  trx_id: string;
+  purpose?: string;
+  month: string;
+  status: 'pending' | 'approved';
+  created_at: string;
+}
+
+interface PaymentConfig {
+  badge_text: string;
+  section_title: string;
+  section_subtitle: string;
+  member_title: string;
+  member_subtitle: string;
+}
+
 interface SiteSettings {
   id?: number;
   site_name: string;
@@ -329,6 +361,10 @@ interface SiteSettings {
   banners: string[];
   designations?: string[];
   campaigns?: FundCampaign[];
+  ui_theme?: 'classic_emerald' | 'royal_noor';
+  payment_numbers?: PaymentMethodItem[];
+  show_payment_on_home?: boolean;
+  payment_config?: PaymentConfig;
   auto_approve: boolean;
 }
 
@@ -395,6 +431,40 @@ interface GalleryItem {
   created_at?: string;
 }
 
+const DEFAULT_PAYMENT_NUMBERS: PaymentMethodItem[] = [
+  {
+    id: 'pm-bkash-1',
+    provider: 'bKash',
+    number: '01800-000000',
+    account_type: 'পার্সোনাল (Send Money)',
+    note: 'বিকাশ সেন্ড মানি করে ট্রানজেকশন আইডি (TrxID) বা প্রেরকের নাম্বার নিচে জমা দিন',
+    is_active: true
+  },
+  {
+    id: 'pm-nagad-1',
+    provider: 'Nagad',
+    number: '01800-000000',
+    account_type: 'পার্সোনাল (Send Money)',
+    note: 'নগদ সেন্ড মানি করে ট্রানজেকশন আইডি (TrxID) বা প্রেরকের নাম্বার নিচে জমা দিন',
+    is_active: true
+  }
+];
+
+const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
+  badge_text: 'সাদাকাহ ও মানবিক সহায়তা তহবিল',
+  section_title: 'মানবতার সেবায় অনুদান ও সহযোগিতা দিন',
+  section_subtitle: 'আপনার ক্ষুদ্র অনুদান, যাকাত বা মাসিক ফান্ডিং অসহায় মানুষের মুখে হাসি ফোটাতে পারে। নিচের যেকোনো বিকাশ বা নগদ নাম্বারে সম্পূর্ণ ফ্রিতে অনুদান পাঠিয়ে ট্রানজেকশন তথ্য নিশ্চিত করুন।',
+  member_title: 'মাসিক ফান্ডিং ও মানবিক অনুদান প্রেরণ (বিকাশ / নগদ)',
+  member_subtitle: 'অ্যাডমিন নির্ধারিত নিচের অফিসিয়াল বিকাশ বা নগদ নাম্বারে আপনার মাসিক ফান্ড বা এককালীন সহযোগিতা পাঠিয়ে নিচের ফর্মে নিশ্চিত করুন।'
+};
+
+const PAYMENT_TITLE_PRESETS = [
+  'মানবতার সেবায় অনুদান ও সহযোগিতা দিন',
+  'সহযোগিতা ও কল্যাণ ফান্ডিং তহবিল',
+  'সাদাকাহ ও মানবিক অনুদান পাঠান',
+  'মাসিক ফান্ড ও মানবিক সহযোগিতা'
+];
+
 const DEFAULT_SETTINGS: SiteSettings = {
   id: 1,
   site_name: DEFAULT_SITE_NAME,
@@ -405,6 +475,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   banners: ['', '', '', ''],
   designations: DEFAULT_DESIGNATIONS,
   campaigns: [],
+  ui_theme: 'classic_emerald',
+  payment_numbers: DEFAULT_PAYMENT_NUMBERS,
+  show_payment_on_home: true,
+  payment_config: DEFAULT_PAYMENT_CONFIG,
   auto_approve: false
 };
 
@@ -503,6 +577,10 @@ const getLocalD1Store = () => {
       logo_url: '',
       favicon_url: '',
       banners: ['', '', '', ''],
+      ui_theme: 'classic_emerald',
+      payment_numbers: DEFAULT_PAYMENT_NUMBERS,
+      show_payment_on_home: true,
+      payment_config: DEFAULT_PAYMENT_CONFIG,
       auto_approve: false
     },
     members: [
@@ -522,6 +600,7 @@ const getLocalD1Store = () => {
     ],
     activities: [],
     finances: [],
+    payments: [],
     ideas: [],
     gallery: []
   };
@@ -529,6 +608,21 @@ const getLocalD1Store = () => {
   if (stored?.settings) {
     stored.settings.logo_url = cleanMediaUrl(stored.settings.logo_url);
     stored.settings.favicon_url = cleanMediaUrl(stored.settings.favicon_url);
+    if (!Array.isArray(stored.settings.payment_numbers)) {
+      stored.settings.payment_numbers = DEFAULT_PAYMENT_NUMBERS;
+    }
+    if (stored.settings.show_payment_on_home === undefined) {
+      stored.settings.show_payment_on_home = true;
+    }
+    if (!stored.settings.payment_config) {
+      stored.settings.payment_config = DEFAULT_PAYMENT_CONFIG;
+    }
+    if (!stored.settings.ui_theme) {
+      stored.settings.ui_theme = 'classic_emerald';
+    }
+  }
+  if (!Array.isArray(stored?.payments)) {
+    stored.payments = [];
   }
   return stored;
 };
@@ -555,6 +649,7 @@ const runLocalD1Fallback = (endpoint: string, method: string, body?: any) => {
         members: store.members,
         activities: store.activities,
         finances: store.finances,
+        payments: store.payments || [],
         ideas: store.ideas,
         gallery: store.gallery
       }
@@ -705,6 +800,7 @@ const runLocalD1Fallback = (endpoint: string, method: string, body?: any) => {
 
   const listKeyMap: Record<string, string> = {
     finances: 'finances',
+    payments: 'payments',
     activities: 'activities',
     ideas: 'ideas',
     gallery: 'gallery'
@@ -766,6 +862,7 @@ const callD1Api = async (endpoint: string, method = 'GET', body?: any) => {
         members: data.members || [],
         activities: data.activities || [],
         finances: data.finances || [],
+        payments: data.payments || [],
         ideas: data.ideas || [],
         gallery: data.gallery || []
       });
@@ -1018,11 +1115,12 @@ const WhiteCircularLogo: React.FC<{
 };
 
 
-// Auto-Sliding Activity Card Component (Multiple Images Auto-Slide with Smooth Dots, No 1/N Badge, No Top Gradient Line)
+// Auto-Sliding Activity Card Component (Supports Both Classic Madinah Emerald & Royal Noor Ottoman Mihrab Themes!)
 const ActivityCardItem: React.FC<{
   act: ActivityItem;
+  uiTheme?: 'classic_emerald' | 'royal_noor';
   onSelect: (act: ActivityItem) => void;
-}> = ({ act, onSelect }) => {
+}> = ({ act, uiTheme = 'classic_emerald', onSelect }) => {
   const validMedia = useMemo(
     () => (Array.isArray(act.media) ? act.media.filter(Boolean) : []),
     [act.media]
@@ -1047,6 +1145,124 @@ const ActivityCardItem: React.FC<{
   const isVideo = isMediaVideo(currentMedia);
   const showComingSoon = checkIsComingSoon(act.is_coming_soon, act.activity_date);
   const formattedDate = formatActivityDate(act.activity_date);
+
+  if (uiTheme === 'royal_noor') {
+    return (
+      <article
+        onClick={() => onSelect(act)}
+        className="group cursor-pointer bg-[#FFFDF9] rounded-3xl overflow-hidden border-2 border-[#D97706]/35 hover:border-[#D97706] shadow-[0_12px_32px_-12px_rgba(17,28,56,0.16)] hover:-translate-y-1.5 transition-all duration-300 flex flex-col h-full"
+      >
+        {/* Top Royal Ottoman Ribbon Bar */}
+        <div className="px-4 py-2 bg-gradient-to-r from-[#111C38] via-[#1E3A6D] to-[#111C38] text-white flex items-center justify-between gap-2 border-b border-[#D97706]/50">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#FCD34D]">
+            <Sparkles className="w-3 h-3 text-[#F59E0B]" />
+            <span>{act.category || 'সাধারণ'}</span>
+          </span>
+          {showComingSoon ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#F59E0B] text-[#111C38]">
+              <Clock className="w-2.5 h-2.5" />
+              <span>শীঘ্রই আসছে</span>
+            </span>
+          ) : formattedDate ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-english text-gray-200">
+              <Calendar className="w-3 h-3 text-[#F59E0B]" />
+              <span>{formattedDate}</span>
+            </span>
+          ) : null}
+        </div>
+
+        {/* Media Frame */}
+        <div className="relative w-full h-52 sm:h-56 overflow-hidden bg-[#111C38]">
+          {validMedia.length > 0 ? (
+            validMedia.map((mediaUrl, idx) => {
+              const active = idx === slideIdx;
+              const mediaIsVid = isMediaVideo(mediaUrl);
+              return (
+                <div
+                  key={`${mediaUrl}-${idx}`}
+                  className={`absolute inset-0 transition-all duration-700 ease-in-out ${
+                    active ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-105 z-0 pointer-events-none'
+                  }`}
+                >
+                  {mediaIsVid ? (
+                    <div className="relative w-full h-full">
+                      <video
+                        src={optimizeMedia(mediaUrl)}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      />
+                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                        <div className="w-11 h-11 rounded-full bg-[#111C38]/90 border-2 border-[#F59E0B] text-[#FCD34D] flex items-center justify-center shadow-lg">
+                          <Play className="w-4 h-4 fill-current ml-0.5" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <img
+                      src={optimizeMedia(mediaUrl)}
+                      alt={act.title}
+                      loading="lazy"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                    />
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-[#111C38] to-[#1E3A6D] flex items-center justify-center">
+              <HeartHandshake className="w-11 h-11 text-[#F59E0B]/60" />
+            </div>
+          )}
+
+          {validMedia.length > 1 && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#111C38]/75 backdrop-blur-md border border-[#F59E0B]/40"
+            >
+              {validMedia.map((_, dotIdx) => (
+                <button
+                  key={dotIdx}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSlideIdx(dotIdx);
+                  }}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    dotIdx === slideIdx ? 'w-5 bg-[#F59E0B]' : 'w-1.5 bg-white/60'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Illuminated Parchment Body */}
+        <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between bg-gradient-to-b from-[#FFFDF9] to-[#FAF5EA]">
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-[#111C38] group-hover:text-[#B45309] transition-colors mb-2 leading-snug">
+              {act.title}
+            </h3>
+            <p className="text-xs sm:text-sm text-gray-600 line-clamp-3 leading-relaxed">
+              {act.description}
+            </p>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-[#D97706]/25 flex items-center justify-between">
+            <span className="text-xs font-bold text-[#B45309] group-hover:text-[#111C38] transition-colors">
+              বিস্তারিত ও গ্যালারি দেখুন
+            </span>
+            <span className="px-3 py-1 rounded-full bg-[#111C38] text-[#FCD34D] text-[11px] font-bold inline-flex items-center gap-1 group-hover:bg-[#B45309] group-hover:text-white transition-all">
+              <span>দেখুন</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <article
@@ -1170,6 +1386,408 @@ const ActivityCardItem: React.FC<{
         </div>
       </div>
     </article>
+  );
+};
+
+// ============================================================================
+// REUSABLE BKASH / NAGAD FUNDING & DONATION WIDGET (HOMEPAGE & MEMBER DASHBOARD)
+// ============================================================================
+const PaymentContributionCard: React.FC<{
+  paymentNumbers: PaymentMethodItem[];
+  paymentConfig?: PaymentConfig;
+  isMemberDashboard?: boolean;
+  uiTheme?: 'classic_emerald' | 'royal_noor';
+  defaultName?: string;
+  defaultPhone?: string;
+  onSubmitPayment: (payload: {
+    provider: 'bKash' | 'Nagad' | 'Rocket';
+    amount: number;
+    sender_number: string;
+    receiver_number: string;
+    trx_id: string;
+    purpose: string;
+    month: string;
+    sender_name: string;
+  }) => Promise<void>;
+  onCopyNumber: (num: string, provider: string) => void;
+}> = ({
+  paymentNumbers,
+  paymentConfig = DEFAULT_PAYMENT_CONFIG,
+  isMemberDashboard = false,
+  uiTheme = 'classic_emerald',
+  defaultName = '',
+  defaultPhone = '',
+  onSubmitPayment,
+  onCopyNumber
+}) => {
+  const bnMonths = [
+    'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
+    'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
+  ];
+  const curMonthName = `${bnMonths[new Date().getMonth()]} ${new Date().getFullYear()}`;
+
+  const activeList = useMemo(
+    () => paymentNumbers.filter((p) => p && p.is_active !== false && String(p.number || '').trim()),
+    [paymentNumbers]
+  );
+
+  const [provider, setProvider] = useState<'bKash' | 'Nagad' | 'Rocket'>(
+    activeList[0]?.provider || 'bKash'
+  );
+  const [amount, setAmount] = useState('');
+  const [senderNumber, setSenderNumber] = useState(defaultPhone);
+  const [trxId, setTrxId] = useState('');
+  const [senderName, setSenderName] = useState(defaultName);
+  const [purpose, setPurpose] = useState(isMemberDashboard ? 'মাসিক ফান্ড' : 'সাধারণ অনুদান ও সহযোগিতা');
+  const [month, setMonth] = useState(curMonthName);
+  const [submitting, setSubmitting] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (defaultName && !senderName) setSenderName(defaultName);
+    if (defaultPhone && !senderNumber) setSenderNumber(defaultPhone);
+  }, [defaultName, defaultPhone]);
+
+  useEffect(() => {
+    if (activeList.length > 0 && !activeList.some((p) => p.provider === provider)) {
+      setProvider(activeList[0].provider);
+    }
+  }, [activeList, provider]);
+
+  const handleCopyClick = (pm: PaymentMethodItem) => {
+    onCopyNumber(pm.number, pm.provider);
+    setCopiedId(pm.id);
+    setTimeout(() => {
+      setCopiedId((prev) => (prev === pm.id ? null : prev));
+    }, 2400);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const numAmt = Number(amount);
+    if (!numAmt || numAmt <= 0) return;
+    if (!senderNumber.trim() && !trxId.trim()) return;
+    setSubmitting(true);
+    const matchedReceiver = activeList.find((p) => p.provider === provider)?.number || '';
+    await onSubmitPayment({
+      provider,
+      amount: numAmt,
+      sender_number: senderNumber.trim(),
+      receiver_number: matchedReceiver,
+      trx_id: trxId.trim(),
+      purpose,
+      month: month.trim() || curMonthName,
+      sender_name: senderName.trim() || defaultName || 'শুভাকাঙ্ক্ষী'
+    });
+    setSubmitting(false);
+    setAmount('');
+    setTrxId('');
+  };
+
+  const isRoyal = uiTheme === 'royal_noor';
+  const badgeText = paymentConfig?.badge_text || DEFAULT_PAYMENT_CONFIG.badge_text;
+  const headingText = isMemberDashboard
+    ? paymentConfig?.member_title || DEFAULT_PAYMENT_CONFIG.member_title
+    : paymentConfig?.section_title || DEFAULT_PAYMENT_CONFIG.section_title;
+  const subText = isMemberDashboard
+    ? paymentConfig?.member_subtitle || DEFAULT_PAYMENT_CONFIG.member_subtitle
+    : paymentConfig?.section_subtitle || DEFAULT_PAYMENT_CONFIG.section_subtitle;
+
+  return (
+    <div
+      className={`rounded-3xl overflow-hidden border-2 shadow-xl transition-all ${
+        isRoyal
+          ? 'bg-[#FFFDF9] border-[#D97706]/60 shadow-[0_16px_40px_-15px_rgba(17,28,56,0.2)]'
+          : 'bg-white border-[#D4AF37]/65 shadow-[0_12px_35px_-12px_rgba(10,47,37,0.18)]'
+      }`}
+    >
+      {/* Top Banner Header */}
+      <div
+        className={`p-5 sm:p-6 text-white border-b ${
+          isRoyal
+            ? 'bg-gradient-to-r from-[#111C38] via-[#1E3A6D] to-[#111C38] border-[#D97706]/50'
+            : 'bg-gradient-to-r from-[#0A2F25] via-[#124A3B] to-[#0A2F25] border-[#D4AF37]/50'
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-md ${
+                isRoyal
+                  ? 'bg-[#D97706]/25 border-[#F59E0B] text-[#FCD34D]'
+                  : 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#F3D568]'
+              }`}
+            >
+              <HeartHandshake className="w-6 h-6" />
+            </div>
+            <div>
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[11px] font-bold mb-1 border ${
+                  isRoyal
+                    ? 'bg-[#D97706]/25 border-[#F59E0B]/50 text-[#FCD34D]'
+                    : 'bg-[#D4AF37]/20 border-[#D4AF37]/45 text-[#F3D568]'
+                }`}
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>{badgeText}</span>
+              </span>
+              <h3 className="text-lg sm:text-2xl font-bold text-white leading-snug">
+                {headingText}
+              </h3>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="px-3 py-1 rounded-full bg-[#E2136E] text-white font-bold text-xs shadow-sm">
+              বিকাশ (bKash)
+            </span>
+            <span className="px-3 py-1 rounded-full bg-[#F7941D] text-white font-bold text-xs shadow-sm">
+              নগদ (Nagad)
+            </span>
+          </div>
+        </div>
+        <p className="text-xs sm:text-sm text-gray-200 mt-2.5 leading-relaxed max-w-3xl">
+          {subText}
+        </p>
+      </div>
+
+      <div className="p-4 sm:p-6 space-y-5">
+        {/* 3-Step Simple Guide Strip */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {[
+            { step: '১', title: 'নাম্বার কপি করুন', desc: 'পছন্দের বিকাশ বা নগদ নাম্বারটি এক ক্লিকে কপি করুন' },
+            { step: '২', title: 'ফান্ড বা অনুদান পাঠান', desc: 'বিকাশ বা নগদ অ্যাপ/ডায়াল (*247# / *167#) থেকে টাকা পাঠান' },
+            { step: '৩', title: 'তথ্য ও TrxID জমা দিন', desc: 'নিচের ফর্মে টাকার পরিমাণ ও নাম্বার/TrxID দিয়ে নিশ্চিত করুন' }
+          ].map((st) => (
+            <div
+              key={st.step}
+              className="p-3 rounded-2xl bg-[#F4F7F5] border border-gray-200/90 flex items-center gap-3"
+            >
+              <span className="w-7 h-7 rounded-full bg-[#0A2F25] text-[#F3D568] font-bold text-xs flex items-center justify-center shrink-0">
+                {st.step}
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[#0A2F25]">{st.title}</p>
+                <p className="text-[11px] text-gray-500 leading-tight">{st.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Active bKash / Nagad Numbers Grid */}
+        {activeList.length === 0 ? (
+          <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-center text-xs sm:text-sm text-amber-900 font-medium">
+            অ্যাডমিন প্যানেল থেকে এখনো কোনো সক্রিয় বিকাশ বা নগদ নাম্বার যুক্ত করা হয়নি।
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {activeList.map((pm) => {
+              const isBkash = pm.provider === 'bKash';
+              const isNagad = pm.provider === 'Nagad';
+              const isCopied = copiedId === pm.id;
+              return (
+                <div
+                  key={pm.id}
+                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between gap-3 ${
+                    isBkash
+                      ? 'bg-gradient-to-br from-pink-50/90 via-white to-pink-50/40 border-[#E2136E]/35 hover:border-[#E2136E]'
+                      : isNagad
+                      ? 'bg-gradient-to-br from-orange-50/90 via-white to-orange-50/40 border-[#F7941D]/40 hover:border-[#F7941D]'
+                      : 'bg-gradient-to-br from-purple-50/90 via-white to-purple-50/40 border-[#8C3494]/35 hover:border-[#8C3494]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`px-3 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${
+                            isBkash
+                              ? 'bg-[#E2136E]'
+                              : isNagad
+                              ? 'bg-[#F7941D]'
+                              : 'bg-[#8C3494]'
+                          }`}
+                        >
+                          {isBkash ? 'বিকাশ (bKash)' : isNagad ? 'নগদ (Nagad)' : 'রকেট (Rocket)'}
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-white border border-gray-200 text-[11px] font-bold text-gray-700">
+                          {pm.account_type}
+                        </span>
+                      </div>
+                      <p className="text-lg sm:text-xl font-bold font-english text-[#0A2F25] mt-2 tracking-wide">
+                        {pm.number}
+                      </p>
+                      {pm.note && (
+                        <p className="text-[11px] sm:text-xs text-gray-600 mt-1 leading-snug">
+                          {pm.note}
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyClick(pm)}
+                      className={`px-3.5 py-2 rounded-xl font-bold text-xs shadow-sm transition shrink-0 inline-flex items-center gap-1.5 border ${
+                        isCopied
+                          ? 'bg-emerald-600 text-white border-emerald-700'
+                          : isBkash
+                          ? 'bg-[#E2136E] hover:bg-[#c81060] text-white border-[#E2136E]'
+                          : isNagad
+                          ? 'bg-[#F7941D] hover:bg-[#df8112] text-white border-[#F7941D]'
+                          : 'bg-[#0A2F25] text-[#F3D568] border-[#D4AF37]'
+                      }`}
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>কপি হয়েছে</span>
+                        </>
+                      ) : (
+                        <span>নাম্বার কপি</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Quick Amount Selector Pills */}
+        <div className="pt-1">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-3">
+            <span className="text-xs font-bold text-[#0A2F25] mr-1">দ্রুত পরিমাণ নির্বাচন:</span>
+            {[100, 200, 500, 1000, 2000, 5000].map((presetAmt) => (
+              <button
+                key={presetAmt}
+                type="button"
+                onClick={() => setAmount(String(presetAmt))}
+                className={`px-3 py-1 rounded-full text-xs font-bold font-english border transition ${
+                  Number(amount) === presetAmt
+                    ? 'bg-[#0A2F25] text-[#F3D568] border-[#D4AF37] shadow-sm scale-105'
+                    : 'bg-[#F4F7F5] text-[#0A2F25] border-gray-200 hover:border-[#D4AF37]'
+                }`}
+              >
+                ৳ {presetAmt.toLocaleString('en-US')}
+              </button>
+            ))}
+          </div>
+
+          {/* Payment Confirmation / TrxID Submission Form */}
+          <form
+            onSubmit={handleSubmit}
+            className="p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200/90 space-y-3.5"
+          >
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs sm:text-sm font-bold text-[#0A2F25]">
+                ফান্ডিং / অনুদান নিশ্চিতকরণ ফর্ম (সম্পূর্ণ ফ্রি ভেরিফিকেশন)
+              </h4>
+              <span className="text-[11px] text-emerald-700 font-semibold">
+                সরাসরি অ্যাডমিন ড্যাশবোর্ডে যুক্ত হবে
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                  প্রেরকের নাম *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
+                  placeholder="আপনার পূর্ণ নাম"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm focus:outline-none focus:border-[#0A2F25]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                  পেমেন্ট মাধ্যম *
+                </label>
+                <select
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as any)}
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm font-bold text-[#0A2F25] focus:outline-none focus:border-[#0A2F25]"
+                >
+                  <option value="bKash">বিকাশ (bKash)</option>
+                  <option value="Nagad">নগদ (Nagad)</option>
+                  <option value="Rocket">রকেট (Rocket)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                  অনুদানের খাত / উদ্দেশ্য
+                </label>
+                <select
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm font-semibold text-[#0A2F25] focus:outline-none focus:border-[#0A2F25]"
+                >
+                  <option value="মাসিক ফান্ড">সদস্যের মাসিক ফান্ড</option>
+                  <option value="সাধারণ অনুদান ও সহযোগিতা">সাধারণ অনুদান ও সহযোগিতা</option>
+                  <option value="প্রজেক্ট ফান্ডিং">চলমান প্রজেক্ট ফান্ডিং</option>
+                  <option value="সাদাকাহ ও যাকাত তহবিল">সাদাকাহ ও যাকাত তহবিল</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                  টাকার পরিমাণ (৳) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="যেমন: 500"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm font-english font-bold focus:outline-none focus:border-[#0A2F25]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                  যে নাম্বার থেকে পাঠিয়েছেন *
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={senderNumber}
+                  onChange={(e) => setSenderNumber(e.target.value)}
+                  placeholder="01XXXXXXXXX"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm font-english focus:outline-none focus:border-[#0A2F25]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0A2F25] mb-1">
+                  ট্রানজেকশন আইডি (TrxID) / শেষ ৪ ডিজিট
+                </label>
+                <input
+                  type="text"
+                  value={trxId}
+                  onChange={(e) => setTrxId(e.target.value)}
+                  placeholder="TrxID বা শেষ ৪ সংখ্যা (ঐচ্ছিক)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm font-english focus:outline-none focus:border-[#0A2F25]"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn-glossy-emerald w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[#0A2F25] to-[#155e4a] text-[#F3D568] border border-[#D4AF37] font-bold text-xs sm:text-sm shadow-md hover:opacity-95 transition flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{submitting ? 'জমা হচ্ছে...' : 'অনুদান ও পেমেন্ট তথ্য সাবমিট করুন'}</span>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -1421,6 +2039,7 @@ export default function App() {
   const [members, setMembers] = useState<MemberUser[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [finances, setFinances] = useState<FinanceRecord[]>([]);
+  const [paymentSubmissions, setPaymentSubmissions] = useState<PaymentSubmission[]>([]);
   const [ideas, setIdeas] = useState<IdeaItem[]>([]);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [loadingInitial, setLoadingInitial] = useState<boolean>(true);
@@ -1547,13 +2166,13 @@ export default function App() {
     if (appUser) {
       if (appUser.role === 'admin') {
         setActiveTab((prev) =>
-          ['overview', 'members', 'finances', 'works', 'ideas', 'gallery', 'settings', 'my_profile'].includes(prev)
+          ['overview', 'members', 'finances', 'works', 'ideas', 'gallery', 'theme_ui', 'settings', 'my_profile'].includes(prev)
             ? prev
             : 'overview'
         );
       } else {
         setActiveTab((prev) =>
-          ['my_account', 'my_profile', 'foundation_funds', 'expense_history'].includes(prev)
+          ['my_account', 'member_payment', 'my_profile', 'foundation_funds', 'expense_history'].includes(prev)
             ? prev
             : 'my_account'
         );
@@ -1614,6 +2233,7 @@ export default function App() {
         if (Array.isArray(d1Boot.data.members)) setMembers(d1Boot.data.members.map(normalizeMemberRow));
         if (Array.isArray(d1Boot.data.activities)) setActivities(d1Boot.data.activities);
         if (Array.isArray(d1Boot.data.finances)) setFinances(d1Boot.data.finances);
+        if (Array.isArray(d1Boot.data.payments)) setPaymentSubmissions(d1Boot.data.payments);
         if (Array.isArray(d1Boot.data.ideas)) setIdeas(d1Boot.data.ideas);
         if (Array.isArray(d1Boot.data.gallery)) setGallery(d1Boot.data.gallery);
         setLoadingInitial(false);
@@ -2439,6 +3059,782 @@ export default function App() {
     const nextCampaigns = allCampaigns.filter((c) => c.id !== campId);
     await persistSettingsInstant({ ...siteSettings, campaigns: nextCampaigns });
     showNotice('প্রজেক্ট ক্যাম্পেইনটি মুছে ফেলা হয়েছে।', 'success');
+  };
+
+  // ============================================================================
+  // BKASH & NAGAD PAYMENT MANAGEMENT + DUAL ISLAMIC UI THEME ENGINE
+  // ============================================================================
+  const [newPaymentForm, setNewPaymentForm] = useState<{
+    id: string;
+    provider: 'bKash' | 'Nagad' | 'Rocket';
+    number: string;
+    account_type: string;
+    note: string;
+    is_active: boolean;
+  }>({
+    id: '',
+    provider: 'bKash',
+    number: '',
+    account_type: 'পার্সোনাল (Send Money)',
+    note: 'সেন্ড মানি করে নিচে ট্রানজেকশন আইডি (TrxID) বা নাম্বার দিন',
+    is_active: true
+  });
+
+  const allPaymentNumbers = useMemo(() => {
+    return Array.isArray(siteSettings.payment_numbers)
+      ? siteSettings.payment_numbers
+      : DEFAULT_PAYMENT_NUMBERS;
+  }, [siteSettings.payment_numbers]);
+
+  const activePaymentNumbers = useMemo(() => {
+    return allPaymentNumbers.filter((p) => p && p.is_active !== false && String(p.number || '').trim());
+  }, [allPaymentNumbers]);
+
+  const activePaymentConfig = useMemo<PaymentConfig>(() => {
+    return {
+      ...DEFAULT_PAYMENT_CONFIG,
+      ...(siteSettings.payment_config || {})
+    };
+  }, [siteSettings.payment_config]);
+
+  const activeUiTheme: 'classic_emerald' | 'royal_noor' =
+    (siteSettings.ui_theme as string) === 'royal_noor' || (siteSettings.ui_theme as string) === 'modern_pearl'
+      ? 'royal_noor'
+      : 'classic_emerald';
+
+  const handleSwitchUiTheme = async (nextTheme: 'classic_emerald' | 'royal_noor') => {
+    const nextSettings: SiteSettings = { ...siteSettings, ui_theme: nextTheme };
+    await persistSettingsInstant(nextSettings);
+    showNotice(
+      nextTheme === 'royal_noor'
+        ? 'নতুন "রয়্যাল নূর-এ-হারামাইন (সুলতানি নেভি ও পুঁথি-ক্রিম ইউআই)" থিম পুরো ওয়েবসাইটে সেভ ও চালু করা হয়েছে!'
+        : '"ক্লাসিক মদিনা এমারেল্ড ও গোল্ড ইউআই" থিম পুরো ওয়েবসাইটে সেভ ও চালু করা হয়েছে!',
+      'success'
+    );
+  };
+
+  const handleToggleShowPaymentOnHome = async () => {
+    const nextVal = siteSettings.show_payment_on_home === false ? true : false;
+    await persistSettingsInstant({ ...siteSettings, show_payment_on_home: nextVal });
+    showNotice(
+      nextVal
+        ? 'হোমপেজে পাবলিক অনুদান ও ফান্ডিং (বিকাশ/নগদ) সেকশন চালু করা হয়েছে!'
+        : 'হোমপেজ থেকে বিকাশ/নগদ সেকশন বন্ধ করা হয়েছে (এখন শুধু মেম্বার ড্যাশবোর্ডে দেখাবে)।',
+      'success'
+    );
+  };
+
+  const handleUpdatePaymentConfigField = (field: keyof PaymentConfig, value: string) => {
+    lastSettingsSaveRef.current = Date.now();
+    setSiteSettings((prev) => ({
+      ...prev,
+      payment_config: {
+        ...DEFAULT_PAYMENT_CONFIG,
+        ...(prev.payment_config || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  const handleSavePaymentConfigInstant = async (customPatch?: Partial<PaymentConfig>) => {
+    const merged: PaymentConfig = {
+      ...activePaymentConfig,
+      ...(customPatch || {})
+    };
+    await persistSettingsInstant({
+      ...siteSettings,
+      payment_config: merged
+    });
+    showNotice('অনুদান ও পেমেন্ট সেকশনের শিরোনাম এবং বার্তা সেভ করা হয়েছে!', 'success');
+  };
+
+  const handleSavePaymentMethod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanNum = newPaymentForm.number.trim();
+    if (!cleanNum) {
+      showNotice('অনুগ্রহ করে বিকাশ বা নগদ নাম্বার লিখুন।', 'error');
+      return;
+    }
+
+    let nextList: PaymentMethodItem[];
+    if (newPaymentForm.id) {
+      nextList = allPaymentNumbers.map((pm) =>
+        pm.id === newPaymentForm.id
+          ? {
+              ...pm,
+              provider: newPaymentForm.provider,
+              number: cleanNum,
+              account_type: newPaymentForm.account_type || 'পার্সোনাল (Send Money)',
+              note: newPaymentForm.note.trim(),
+              is_active: newPaymentForm.is_active
+            }
+          : pm
+      );
+      showNotice(`${newPaymentForm.provider} নাম্বারটি সফলভাবে আপডেট করা হয়েছে!`, 'success');
+    } else {
+      const newItem: PaymentMethodItem = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `pm-${Date.now()}`,
+        provider: newPaymentForm.provider,
+        number: cleanNum,
+        account_type: newPaymentForm.account_type || 'পার্সোনাল (Send Money)',
+        note: newPaymentForm.note.trim(),
+        is_active: true
+      };
+      nextList = [...allPaymentNumbers, newItem];
+      showNotice(`নতুন ${newPaymentForm.provider} নাম্বার সফলভাবে যুক্ত ও সেভ করা হয়েছে!`, 'success');
+    }
+
+    setNewPaymentForm({
+      id: '',
+      provider: 'bKash',
+      number: '',
+      account_type: 'পার্সোনাল (Send Money)',
+      note: 'সেন্ড মানি করে নিচে ট্রানজেকশন আইডি (TrxID) বা নাম্বার দিন',
+      is_active: true
+    });
+    await persistSettingsInstant({ ...siteSettings, payment_numbers: nextList });
+  };
+
+  const handleTogglePaymentMethodActive = async (pm: PaymentMethodItem) => {
+    const nextList = allPaymentNumbers.map((item) =>
+      item.id === pm.id ? { ...item, is_active: item.is_active === false ? true : false } : item
+    );
+    await persistSettingsInstant({ ...siteSettings, payment_numbers: nextList });
+    showNotice(
+      pm.is_active === false
+        ? `${pm.provider} (${pm.number}) নাম্বারটি সক্রিয় করা হয়েছে!`
+        : `${pm.provider} (${pm.number}) নাম্বারটি সাময়িকভাবে হাইড করা হয়েছে।`,
+      'success'
+    );
+  };
+
+  const handleDeletePaymentMethod = async (id: string) => {
+    const nextList = allPaymentNumbers.filter((p) => p.id !== id);
+    await persistSettingsInstant({ ...siteSettings, payment_numbers: nextList });
+    showNotice('পেমেন্ট নাম্বারটি তালিকা থেকে মুছে ফেলা হয়েছে।', 'success');
+  };
+
+  const copyPaymentNum = (num: string, providerName: string) => {
+    try {
+      navigator.clipboard.writeText(num);
+      showNotice(`${providerName} নাম্বার (${num}) কপি করা হয়েছে!`, 'success');
+    } catch {
+      showNotice(`${providerName} নাম্বার: ${num}`, 'success');
+    }
+  };
+
+  const handleSubmitPaymentContribution = async (payload: {
+    provider: 'bKash' | 'Nagad' | 'Rocket';
+    amount: number;
+    sender_number: string;
+    receiver_number: string;
+    trx_id: string;
+    purpose: string;
+    month: string;
+    sender_name: string;
+  }) => {
+    const newSub: PaymentSubmission = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `pay-${Date.now()}`,
+      member_id: appUser?.id || '',
+      sender_name: payload.sender_name || appUser?.name || 'শুভাকাঙ্ক্ষী',
+      provider: payload.provider,
+      amount: payload.amount,
+      sender_number: payload.sender_number,
+      receiver_number: payload.receiver_number,
+      trx_id: payload.trx_id,
+      purpose: payload.purpose || 'সাধারণ অনুদান ও সহযোগিতা',
+      month: payload.month,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    };
+    setPaymentSubmissions((prev) => [newSub, ...prev]);
+    await callD1Api('payments', 'POST', newSub);
+    showNotice(
+      'আলহামদুলিল্লাহ! আপনার অনুদান/ফান্ডিং তথ্য সফলভাবে জমা হয়েছে। অ্যাডমিন যাচাই করে ফান্ডে যুক্ত করবেন।',
+      'success'
+    );
+  };
+
+  const handleApprovePaymentSubmission = async (sub: PaymentSubmission) => {
+    setPaymentSubmissions((prev) =>
+      prev.map((p) => (p.id === sub.id ? { ...p, status: 'approved' } : p))
+    );
+    await callD1Api('payments', 'PUT', { id: sub.id, status: 'approved' });
+
+    const newFin: FinanceRecord = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `fin-${Date.now()}`,
+      type: 'income',
+      amount: Number(sub.amount),
+      memberuid: sub.member_id || '',
+      month: sub.month || '',
+      description: `${sub.provider} (${sub.purpose || 'অনুদান'}) — ${sub.sender_name}${
+        sub.trx_id ? ` [TrxID: ${sub.trx_id}]` : sub.sender_number ? ` [${sub.sender_number}]` : ''
+      }`,
+      created_at: new Date().toISOString()
+    };
+    setFinances((prev) => [newFin, ...prev]);
+    await callD1Api('finances', 'POST', newFin);
+    showNotice(`${sub.sender_name}-এর ৳${sub.amount} ফান্ড অনুমোদন ও মূল তহবিলে যোগ করা হয়েছে!`, 'success');
+  };
+
+  const handleDeletePaymentSubmission = async (subId: string) => {
+    setPaymentSubmissions((prev) => prev.filter((p) => p.id !== subId));
+    await callD1Api(`payments?id=${encodeURIComponent(subId)}`, 'DELETE');
+    showNotice('পেমেন্ট রিকোয়েস্টটি মুছে ফেলা হয়েছে।', 'success');
+  };
+
+  // Reusable Admin Dual Islamic Theme Switcher Component
+  const renderAdminThemeSwitcher = () => (
+    <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-[#D4AF37]/60 shadow-md space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-gray-100">
+        <div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#0A2F25]/10 text-[#0A2F25] text-[11px] font-bold mb-1">
+            <Sparkles className="w-3 h-3 text-[#D4AF37]" />
+            <span>ডুয়াল ইসলামিক থিম ও ইউআই ইঞ্জিন</span>
+          </span>
+          <h3 className="text-base sm:text-xl font-bold text-[#0A2F25]">
+            ওয়েবসাইটের থিম ও সম্পূর্ণ ইউআই ডিজাইন পরিবর্তন করুন
+          </h3>
+          <p className="text-xs text-gray-500">
+            নিচের ২টি ইসলামিক থিমের মধ্যে যেকোনোটি সিলেক্ট করে সেভ দিলে পুরো ওয়েবসাইটের কালার, হেডার, হিরো ও কার্ড ডিজাইন সাথে সাথে পরিবর্তন হয়ে যাবে
+          </p>
+        </div>
+        <span className="px-3.5 py-1.5 rounded-full bg-[#0A2F25] text-[#F3D568] border border-[#D4AF37] text-xs font-bold">
+          সক্রিয় থিম: {activeUiTheme === 'royal_noor' ? 'রয়্যাল নূর-এ-হারামাইন (নতুন UI)' : 'ক্লাসিক মদিনা এমারেল্ড (পূর্বের UI)'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Theme 1 Card: Classic Madinah Emerald & Gold */}
+        <div
+          onClick={() => handleSwitchUiTheme('classic_emerald')}
+          className={`cursor-pointer rounded-3xl p-4 sm:p-5 border-2 transition-all flex flex-col justify-between gap-4 ${
+            activeUiTheme === 'classic_emerald'
+              ? 'bg-gradient-to-br from-[#0A2F25]/10 via-white to-[#0A2F25]/5 border-[#0A2F25] ring-2 ring-[#D4AF37] shadow-xl'
+              : 'bg-[#F4F7F5]/60 border-gray-200 hover:border-[#D4AF37]'
+          }`}
+        >
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#0A2F25] text-[#F3D568] border border-[#D4AF37]">
+                  থিম ১ • পূর্বের ইসলামিক ইউআই (উন্নত সংস্করণ)
+                </span>
+                <h4 className="text-base sm:text-lg font-bold text-[#0A2F25] mt-1.5">
+                  ক্লাসিক মদিনা এমারেল্ড ও রয়্যাল গোল্ড ইউআই
+                </h4>
+              </div>
+              {activeUiTheme === 'classic_emerald' && (
+                <span className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow">
+                  <Check className="w-4 h-4" />
+                </span>
+              )}
+            </div>
+
+            {/* Visual Color Swatches Preview */}
+            <div className="p-3 rounded-2xl bg-[#07221B] text-white border border-[#D4AF37]/60 space-y-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-[#F3D568] font-bold">কালার প্যালেট প্রিভিউ</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-[#0A2F25] border border-white/40" title="#0A2F25" />
+                  <span className="w-4 h-4 rounded-full bg-[#155e4a] border border-white/40" title="#155e4a" />
+                  <span className="w-4 h-4 rounded-full bg-[#D4AF37] border border-white/40" title="#D4AF37" />
+                  <span className="w-4 h-4 rounded-full bg-[#F4F7F5] border border-white/40" title="#F4F7F5" />
+                </div>
+              </div>
+              <div className="h-2 rounded-full bg-gradient-to-r from-[#0A2F25] via-[#D4AF37] to-[#155e4a]" />
+              <p className="text-[11px] text-gray-200 leading-relaxed">
+                ডিপ এমারেল্ড গ্রিন হেডার, সেন্টার্ড ভিনটেজ হিরো ব্যানার, ঘূর্ণায়মান সোনালি মান্ডালা এবং ক্লাসিক ম্যাসনারি কার্যক্রম কার্ড।
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSwitchUiTheme('classic_emerald');
+            }}
+            className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 ${
+              activeUiTheme === 'classic_emerald'
+                ? 'bg-emerald-700 text-white shadow-md'
+                : 'bg-[#0A2F25] text-[#F3D568] border border-[#D4AF37] hover:opacity-95'
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>
+              {activeUiTheme === 'classic_emerald'
+                ? '✓ এই থিমটি বর্তমানে সেভ ও চালু আছে'
+                : 'এই থিমটি সেভ ও চালু করুন'}
+            </span>
+          </button>
+        </div>
+
+        {/* Theme 2 Card: Royal Noor-e-Haramain (New Ottoman Sapphire, Warm Parchment & Copper Gold UI) */}
+        <div
+          onClick={() => handleSwitchUiTheme('royal_noor')}
+          className={`cursor-pointer rounded-3xl p-4 sm:p-5 border-2 transition-all flex flex-col justify-between gap-4 ${
+            activeUiTheme === 'royal_noor'
+              ? 'bg-gradient-to-br from-[#FAF5EA] via-white to-[#FEF3C7]/40 border-[#111C38] ring-2 ring-[#D97706] shadow-xl'
+              : 'bg-[#FAF5EA]/70 border-gray-200 hover:border-[#D97706]'
+          }`}
+        >
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#D97706] text-white">
+                  থিম ২ • সম্পূর্ণ নতুন ও ভিন্ন ইসলামিক ইউআই
+                </span>
+                <h4 className="text-base sm:text-lg font-bold text-[#111C38] mt-1.5">
+                  রয়্যাল নূর-এ-হারামাইন (সুলতানি নীল, কপার-গোল্ড ও পুঁথি-ক্রিম ইউআই)
+                </h4>
+              </div>
+              {activeUiTheme === 'royal_noor' && (
+                <span className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow">
+                  <Check className="w-4 h-4" />
+                </span>
+              )}
+            </div>
+
+            {/* Visual Color Swatches Preview */}
+            <div
+              className="p-3 rounded-2xl text-white border border-[#F59E0B]/60 space-y-2"
+              style={{ background: 'linear-gradient(135deg, #0B132B 0%, #1E3A6D 60%, #111C38 100%)' }}
+            >
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-[#FCD34D] font-bold">নতুন কালার ও আর্কিটেকচার</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-[#111C38] border border-white/40" title="#111C38" />
+                  <span className="w-4 h-4 rounded-full bg-[#1E3A6D] border border-white/40" title="#1E3A6D" />
+                  <span className="w-4 h-4 rounded-full bg-[#D97706] border border-white/40" title="#D97706" />
+                  <span className="w-4 h-4 rounded-full bg-[#FAF5EA] border border-white/40" title="#FAF5EA" />
+                </div>
+              </div>
+              <div className="h-2 rounded-full bg-gradient-to-r from-[#111C38] via-[#F59E0B] to-[#0D9488]" />
+              <p className="text-[11px] text-gray-200 leading-relaxed">
+                বিসমিল্লাহ ক্যালিগ্রাফি রিবন, ফ্লোটিং প্যালেস নেভিগেশন ডক, ২-কলাম অটোমান মিহরাব আর্চ হিরো + ৪টি লাইভ ইমপ্যাক্ট কাউন্টার, ইলুমিনেটেড ম্যাগাজিন কার্ড ও ৩-কলাম রয়্যাল ফুটার।
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSwitchUiTheme('royal_noor');
+            }}
+            style={{
+              background:
+                activeUiTheme === 'royal_noor'
+                  ? '#059669'
+                  : 'linear-gradient(135deg, #111C38 0%, #1E3A6D 100%)'
+            }}
+            className="w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white border border-[#F59E0B] shadow-md hover:opacity-95 transition flex items-center justify-center gap-2"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>
+              {activeUiTheme === 'royal_noor'
+                ? '✓ নতুন রয়্যাল নূর থিম বর্তমানে সেভ ও চালু আছে'
+                : 'নতুন রয়্যাল নূর থিম সেভ ও চালু করুন'}
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Reusable Admin bKash / Nagad Payment & Homepage Toggle Manager
+  const renderAdminPaymentManager = () => {
+    const isHomeOn = siteSettings.show_payment_on_home !== false;
+    return (
+      <div className="bg-white rounded-3xl p-4 sm:p-6 border-2 border-[#D4AF37]/60 shadow-md space-y-5">
+        {/* Top Header + Public Homepage Display Toggle Switch */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full bg-[#E2136E] text-white text-[10px] font-bold">
+                বিকাশ (bKash)
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-[#F7941D] text-white text-[10px] font-bold">
+                নগদ (Nagad)
+              </span>
+              <span className="text-xs font-bold text-emerald-700">• সম্পূর্ণ ফ্রি পেমেন্ট সিস্টেম</span>
+            </div>
+            <h3 className="text-base sm:text-xl font-bold text-[#0A2F25]">
+              বিকাশ ও নগদ পেমেন্ট এবং অনুদান/ফান্ডিং ম্যানেজমেন্ট
+            </h3>
+            <p className="text-xs text-gray-500">
+              নতুন বিকাশ বা নগদ নাম্বার যুক্ত করুন — এটি অটোমেটিক্যালি সকল সদস্যের ড্যাশবোর্ডে এবং হোমপেজে (টগল অন থাকলে) দেখাবে
+            </p>
+          </div>
+
+          {/* Public Homepage Toggle Card */}
+          <div className="p-3 rounded-2xl bg-[#F4F7F5] border border-[#D4AF37]/50 flex items-center justify-between sm:justify-end gap-3 shrink-0">
+            <div>
+              <p className="text-xs font-bold text-[#0A2F25]">
+                হোমপেজে পাবলিকলি অনুদান সেকশন:
+              </p>
+              <p className="text-[11px] font-semibold text-emerald-700">
+                {isHomeOn ? 'চালু আছে (হোমপেজে সবাই দেখবে)' : 'বন্ধ আছে (শুধু মেম্বার ড্যাশবোর্ডে দেখাবে)'}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isHomeOn}
+              onClick={handleToggleShowPaymentOnHome}
+              className={`relative inline-flex h-7 w-13 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 px-0.5 items-center ${
+                isHomeOn ? 'bg-emerald-600' : 'bg-gray-300'
+              }`}
+              style={{ width: '52px' }}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ${
+                  isHomeOn ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Add / Edit bKash or Nagad Number Form */}
+        <form
+          onSubmit={handleSavePaymentMethod}
+          className="p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs sm:text-sm font-bold text-[#0A2F25]">
+              {newPaymentForm.id ? 'বিকাশ / নগদ নাম্বার এডিট করুন' : 'নতুন বিকাশ বা নগদ নাম্বার অ্যাড করুন'}
+            </h4>
+            {newPaymentForm.id && (
+              <button
+                type="button"
+                onClick={() =>
+                  setNewPaymentForm({
+                    id: '',
+                    provider: 'bKash',
+                    number: '',
+                    account_type: 'পার্সোনাল (Send Money)',
+                    note: 'সেন্ড মানি করে নিচে ট্রানজেকশন আইডি (TrxID) বা নাম্বার দিন',
+                    is_active: true
+                  })
+                }
+                className="text-xs font-bold text-red-600 hover:underline"
+              >
+                এডিট বাতিল করুন
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-[#0A2F25] mb-1">মাধ্যম নির্বাচন *</label>
+              <select
+                value={newPaymentForm.provider}
+                onChange={(e) => setNewPaymentForm((p) => ({ ...p, provider: e.target.value as any }))}
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm font-bold text-[#0A2F25]"
+              >
+                <option value="bKash">বিকাশ (bKash)</option>
+                <option value="Nagad">নগদ (Nagad)</option>
+                <option value="Rocket">রকেট (Rocket)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#0A2F25] mb-1">মোবাইল নাম্বার *</label>
+              <input
+                type="tel"
+                required
+                value={newPaymentForm.number}
+                onChange={(e) => setNewPaymentForm((p) => ({ ...p, number: e.target.value }))}
+                placeholder="017XXXXXXXX / 018XXXXXXXX"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm font-english font-bold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#0A2F25] mb-1">নাম্বারের ধরন *</label>
+              <select
+                value={newPaymentForm.account_type}
+                onChange={(e) => setNewPaymentForm((p) => ({ ...p, account_type: e.target.value }))}
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm font-semibold"
+              >
+                <option value="পার্সোনাল (Send Money)">পার্সোনাল (Send Money)</option>
+                <option value="মার্চেন্ট (Payment)">মার্চেন্ট (Payment)</option>
+                <option value="এজেন্ট (Cash Out)">এজেন্ট (Cash Out)</option>
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 rounded-xl bg-[#0A2F25] text-[#F3D568] border border-[#D4AF37] text-xs sm:text-sm font-bold shadow hover:opacity-95 transition inline-flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{newPaymentForm.id ? 'আপডেট ও সেভ করুন' : 'নাম্বার যুক্ত করুন'}</span>
+              </button>
+            </div>
+
+            <div className="sm:col-span-2 lg:col-span-4">
+              <input
+                type="text"
+                value={newPaymentForm.note}
+                onChange={(e) => setNewPaymentForm((p) => ({ ...p, note: e.target.value }))}
+                placeholder="নির্দেশনা বা নোট (যেমন: বিকাশ সেন্ড মানি করে রেফারেন্সে আপনার নাম লিখুন)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-xs"
+              />
+            </div>
+          </div>
+        </form>
+
+        {/* Active / Saved Payment Numbers List */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs sm:text-sm font-bold text-[#0A2F25]">
+              যুক্তকৃত বিকাশ ও নগদ নাম্বারসমূহ ({allPaymentNumbers.length}টি)
+            </h4>
+            <span className="text-[11px] text-gray-500">
+              সক্রিয়: {activePaymentNumbers.length}টি
+            </span>
+          </div>
+
+          {allPaymentNumbers.length === 0 ? (
+            <p className="text-xs text-gray-500 py-4 text-center bg-[#F4F7F5] rounded-2xl">
+              এখনো কোনো বিকাশ বা নগদ নাম্বার যুক্ত করা হয়নি। উপরের ফর্ম থেকে নাম্বার যুক্ত করুন।
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {allPaymentNumbers.map((pm) => {
+                const isBkash = pm.provider === 'bKash';
+                const isNagad = pm.provider === 'Nagad';
+                const isActive = pm.is_active !== false;
+                return (
+                  <div
+                    key={pm.id}
+                    className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 transition ${
+                      isActive
+                        ? 'bg-[#F4F7F5] border-gray-200'
+                        : 'bg-gray-100 border-gray-200 opacity-60'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white ${
+                            isBkash
+                              ? 'bg-[#E2136E]'
+                              : isNagad
+                              ? 'bg-[#F7941D]'
+                              : 'bg-[#8C3494]'
+                          }`}
+                        >
+                          {isBkash ? 'বিকাশ' : isNagad ? 'নগদ' : 'রকেট'}
+                        </span>
+                        <span className="text-xs sm:text-sm font-bold font-english text-[#0A2F25]">
+                          {pm.number}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[10px] font-semibold text-gray-600">
+                          {pm.account_type}
+                        </span>
+                      </div>
+                      {pm.note && (
+                        <p className="text-[11px] text-gray-500 mt-1 truncate">{pm.note}</p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePaymentMethodActive(pm)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition ${
+                          isActive
+                            ? 'bg-emerald-600 text-white border-emerald-700'
+                            : 'bg-gray-200 text-gray-700 border-gray-300'
+                        }`}
+                      >
+                        {isActive ? 'চালু' : 'হাইড'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewPaymentForm({
+                            id: pm.id,
+                            provider: pm.provider,
+                            number: pm.number,
+                            account_type: pm.account_type || 'পার্সোনাল (Send Money)',
+                            note: pm.note || '',
+                            is_active: pm.is_active !== false
+                          })
+                        }
+                        className="p-1.5 rounded-full bg-white border border-gray-300 text-[#0A2F25] hover:border-[#D4AF37]"
+                        title="এডিট"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePaymentMethod(pm.id)}
+                        className="p-1.5 rounded-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition"
+                        title="ডিলিট"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Customize Payment Section Heading & Wording */}
+        <div className="p-4 rounded-2xl bg-[#F4F7F5] border border-gray-200 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-[#0A2F25]">
+                হোমপেজ ও ড্যাশবোর্ডের অনুদান/ফান্ডিং শিরোনাম কাস্টমাইজেশন
+              </h4>
+              <p className="text-[11px] text-gray-500">
+                নিচের সুন্দর রেডিমেড শব্দগুলো থেকে সিলেক্ট করুন অথবা নিজের মতো লিখে সেভ করুন
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleSavePaymentConfigInstant()}
+              className="px-4 py-1.5 rounded-full bg-[#0A2F25] text-[#F3D568] border border-[#D4AF37] text-xs font-bold shadow-sm"
+            >
+              শিরোনাম সেভ করুন
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {PAYMENT_TITLE_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => handleSavePaymentConfigInstant({ section_title: preset })}
+                className={`px-3 py-1 rounded-full text-[11px] font-bold border transition ${
+                  activePaymentConfig.section_title === preset
+                    ? 'bg-[#0A2F25] text-[#F3D568] border-[#D4AF37]'
+                    : 'bg-white text-[#0A2F25] border-gray-300 hover:border-[#D4AF37]'
+                }`}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-[#0A2F25] mb-1">
+                হোমপেজ অনুদান শিরোনাম
+              </label>
+              <input
+                type="text"
+                value={activePaymentConfig.section_title}
+                onChange={(e) => handleUpdatePaymentConfigField('section_title', e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-[#0A2F25] mb-1">
+                মেম্বার ড্যাশবোর্ড পেমেন্ট শিরোনাম
+              </label>
+              <input
+                type="text"
+                value={activePaymentConfig.member_title}
+                onChange={(e) => handleUpdatePaymentConfigField('member_title', e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs sm:text-sm"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Submitted bKash / Nagad Contributions Verification Queue */}
+        <div className="pt-2 border-t border-gray-100 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs sm:text-sm font-bold text-[#0A2F25]">
+              প্রেরিত বিকাশ ও নগদ অনুদান/ফান্ডিং ভেরিফিকেশন তালিকা ({paymentSubmissions.length})
+            </h4>
+            {paymentSubmissions.filter((p) => p.status === 'pending').length > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold">
+                অপেক্ষমাণ: {paymentSubmissions.filter((p) => p.status === 'pending').length}টি
+              </span>
+            )}
+          </div>
+
+          {paymentSubmissions.length === 0 ? (
+            <p className="text-xs text-gray-500 py-4 text-center bg-[#F4F7F5] rounded-2xl">
+              এখনো কোনো বিকাশ বা নগদ ট্রানজেকশন রিকোয়েস্ট জমা পড়েনি।
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {paymentSubmissions.map((sub) => (
+                <div
+                  key={sub.id}
+                  className="p-3.5 rounded-2xl bg-[#F4F7F5] border border-gray-200 flex flex-wrap items-center justify-between gap-3"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white ${
+                          sub.provider === 'bKash'
+                            ? 'bg-[#E2136E]'
+                            : sub.provider === 'Nagad'
+                            ? 'bg-[#F7941D]'
+                            : 'bg-[#8C3494]'
+                        }`}
+                      >
+                        {sub.provider}
+                      </span>
+                      <span className="font-bold text-xs sm:text-sm text-[#0A2F25]">
+                        {sub.sender_name}
+                      </span>
+                      <span className="font-bold font-english text-xs sm:text-sm text-emerald-700">
+                        ৳ {Number(sub.amount).toLocaleString('en-US')}
+                      </span>
+                      {sub.purpose && (
+                        <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[10px] font-semibold text-gray-600">
+                          {sub.purpose}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-600 font-english mt-1">
+                      প্রেরকের নাম্বার: {sub.sender_number || '—'} {sub.trx_id ? `• TrxID: ${sub.trx_id}` : ''} • মাস: {sub.month || 'চলতি'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {sub.status === 'pending' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleApprovePaymentSubmission(sub)}
+                        className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow transition"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>অনুমোদন ও ফান্ডে যোগ</span>
+                      </button>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                        ✓ অনুমোদিত
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePaymentSubmission(sub.id)}
+                      className="p-1.5 rounded-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition"
+                      title="ডিলিট"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const activeDesignations = useMemo(() => {
@@ -3861,7 +5257,27 @@ export default function App() {
   // 12. RENDER LUXURY ISLAMIC UI
   // ============================================================================
   return (
-    <div className="min-h-screen flex flex-col bg-[#F4F7F5] text-[#0A2F25] overflow-x-hidden w-full max-w-[100vw] selection:bg-[#D4AF37] selection:text-[#0A2F25]">
+    <div
+      data-ui-theme={activeUiTheme}
+      className={`min-h-screen flex flex-col overflow-x-hidden w-full max-w-[100vw] selection:bg-[#D4AF37] selection:text-[#0A2F25] ${
+        activeUiTheme === 'royal_noor'
+          ? 'bg-[#FAF5EA] text-[#111C38]'
+          : 'bg-[#F4F7F5] text-[#0A2F25]'
+      }`}
+    >
+      {/* ROYAL NOOR SPECIAL BISMILLAH & HERITAGE TOP RIBBON */}
+      {activeUiTheme === 'royal_noor' && (
+        <div
+          className="w-full py-1 px-3 border-b border-[#F59E0B]/40 text-center text-[11px] sm:text-xs font-semibold text-[#FCD34D] flex items-center justify-center gap-3"
+          style={{ background: 'linear-gradient(90deg, #0B132B 0%, #172554 50%, #0B132B 100%)' }}
+        >
+          <span>﷽ • বিসমিল্লাহির রাহমানির রাহিম</span>
+          <span className="hidden sm:inline text-white/40">|</span>
+          <span className="hidden sm:inline text-gray-200">
+            মানবতার কল্যাণে ও সাদাকাহ প্রসারের বিশ্বস্ত প্ল্যাটফর্ম
+          </span>
+        </div>
+      )}
       {/* 1. TOP MARQUEE ANNOUNCEMENT BAR (PURE SVG ICONS, EDITABLE BY ADMIN) */}
       <div
         className="w-full overflow-hidden py-1.5 border-b border-[#D4AF37]/40 text-[#FFFFFF]"
@@ -3919,6 +5335,34 @@ export default function App() {
 
           {/* Right Side Compact Navigation Buttons (Only Active View Turns Golden!) */}
           <nav className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Quick Donate / Funding Button in Header */}
+            {(siteSettings.show_payment_on_home !== false || appUser) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setHeaderProfileMenuOpen(false);
+                  if (appUser && currentView === 'dashboard') {
+                    setActiveTab(appUser.role === 'admin' ? 'finances' : 'member_payment');
+                  } else if (siteSettings.show_payment_on_home !== false) {
+                    if (currentView !== 'home') {
+                      setCurrentView('home');
+                      setTimeout(() => {
+                        document.getElementById('homepage-donation-section')?.scrollIntoView({ behavior: 'smooth' });
+                      }, 180);
+                    } else {
+                      document.getElementById('homepage-donation-section')?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  } else if (appUser) {
+                    setActiveTab(appUser.role === 'admin' ? 'finances' : 'member_payment');
+                    setCurrentView('dashboard');
+                  }
+                }}
+                className="inline-flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all border border-[#F59E0B] bg-gradient-to-r from-[#E2136E] to-[#F7941D] text-white shadow-sm hover:brightness-105 whitespace-nowrap shrink-0"
+              >
+                <HeartHandshake className="w-3.5 h-3.5 shrink-0" />
+                <span>অনুদান দিন</span>
+              </button>
+            )}
             {/* Members Button */}
             <button
               type="button"
@@ -4168,7 +5612,154 @@ export default function App() {
         {/* ================================================================== */}
         {currentView === 'home' && (
           <div>
-            {/* A. COMPACT HERO WITH SOFT BANNER OPACITY, RADIAL VINTAGE BLUR & FLOATING INSPIRATIONAL PILLS */}
+            {activeUiTheme === 'royal_noor' ? (
+              /* ================================================================ */
+              /* THEME 2 (`royal_noor`): ROYAL NOOR-E-HARAMAIN OTTOMAN MIHRAB     */
+              /* SPLIT SHOWCASE HERO + 4 LIVE IMPACT COUNTER BENTO CARDS          */
+              /* ================================================================ */
+              <section
+                className="relative overflow-hidden py-8 sm:py-14 px-3 sm:px-6 border-b-2 border-[#D97706]"
+                style={{
+                  background:
+                    'radial-gradient(circle at 20% 20%, #1E3A6D 0%, #111C38 55%, #0B132B 100%)'
+                }}
+              >
+                {/* Decorative Corner Mandalas */}
+                <div className="absolute -left-10 -top-10 opacity-20 pointer-events-none">
+                  <IslamicMandala className="animate-mandala" size={150} />
+                </div>
+                <div className="absolute -right-10 -bottom-10 opacity-20 pointer-events-none">
+                  <IslamicMandala className="animate-mandala-reverse" size={150} />
+                </div>
+
+                <div className="relative z-10 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-7 items-center">
+                  {/* Left Column: Royal Calligraphy Badge, Title, Wisdom Box & Action Buttons */}
+                  <div className="lg:col-span-7 text-center lg:text-left flex flex-col items-center lg:items-start">
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#D97706]/25 border border-[#F59E0B] text-[#FCD34D] text-xs font-bold mb-4 shadow">
+                      <Sparkles className="w-3.5 h-3.5 text-[#F59E0B]" />
+                      <span>{INSPIRATIONAL_FLOATING_QUOTES[quoteIndex]}</span>
+                    </div>
+
+                    <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white leading-tight mb-3">
+                      মানবতার সেবায় ও কল্যাণে{' '}
+                      <span className="text-[#FCD34D] underline decoration-[#D97706]/70">
+                        {siteSettings.site_name || DEFAULT_SITE_NAME}
+                      </span>
+                    </h1>
+
+                    <p className="text-xs sm:text-base text-gray-200 max-w-xl mb-5 leading-relaxed">
+                      {siteSettings.tagline || DEFAULT_TAGLINE}
+                    </p>
+
+                    {/* Illuminated Humanitarian Callout Box */}
+                    <div className="w-full max-w-xl p-3.5 sm:p-4 rounded-2xl bg-white/10 backdrop-blur-md border-l-4 border-[#F59E0B] text-left mb-6">
+                      <p className="text-xs sm:text-sm text-[#FDE68A] font-semibold leading-relaxed">
+                        “যারা আল্লাহর পথে নিজেদের ধন-সম্পদ ব্যয় করে, তাদের উপমা একটি শস্যবীজের মতো, যা থেকে সাতটি শীষ জন্মায়।” — মানবিক কাজে আপনার অংশগ্রহণই আমাদের শক্তি।
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2.5 sm:gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setCurrentView('join')}
+                        className="btn-glossy-gold inline-flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-2xl font-bold text-xs sm:text-sm shadow-xl hover:scale-[1.02] transition-all whitespace-nowrap"
+                      >
+                        <UserPlus className="w-4 h-4 shrink-0" />
+                        <span>সদস্য হিসেবে যুক্ত হোন</span>
+                      </button>
+
+                      {siteSettings.show_payment_on_home !== false && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            document.getElementById('homepage-donation-section')?.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-2xl bg-gradient-to-r from-[#E2136E] to-[#F7941D] text-white border border-white/30 font-bold text-xs sm:text-sm shadow-lg hover:scale-[1.02] transition-all whitespace-nowrap"
+                        >
+                          <HeartHandshake className="w-4 h-4 shrink-0" />
+                          <span>অনুদান ও সহযোগিতা দিন</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setCurrentView('members')}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-[#F59E0B]/60 font-semibold text-xs sm:text-sm transition-all whitespace-nowrap"
+                      >
+                        <Users className="w-4 h-4 text-[#FCD34D] shrink-0" />
+                        <span>সদস্যবৃন্দ দেখুন</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Ottoman Pointed Mihrab Arch Frame + 4 Live Impact Counter Cards */}
+                  <div className="lg:col-span-5 space-y-4">
+                    <div className="relative h-56 sm:h-64 mihrab-arch-frame overflow-hidden bg-[#0B132B] border-2 border-[#F59E0B] shadow-2xl flex items-center justify-center">
+                      {validBanners.map((bannerUrl, idx) => (
+                        <div
+                          key={idx}
+                          className={`absolute inset-0 transition-all duration-1000 ease-in-out ${
+                            idx === bannerIndex ? 'opacity-65 animate-kenburns' : 'opacity-0'
+                          }`}
+                          style={{
+                            backgroundImage: `url("${optimizeMedia(bannerUrl)}")`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center'
+                          }}
+                        />
+                      ))}
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background:
+                            'radial-gradient(circle at 50% 45%, rgba(17,28,56,0.25) 0%, rgba(11,19,43,0.85) 100%)'
+                        }}
+                      />
+                      <div className="relative z-10 flex flex-col items-center text-center p-4">
+                        <div className="p-1.5 rounded-full bg-gradient-to-tr from-[#D97706] via-[#FDE68A] to-[#D97706] shadow-2xl mb-2.5">
+                          <WhiteCircularLogo
+                            logoUrl={siteSettings.logo_url}
+                            sizeClass="w-16 h-16 sm:w-20 sm:h-20"
+                          />
+                        </div>
+                        <span className="px-4 py-1 rounded-full bg-[#111C38]/85 backdrop-blur-md text-[#FCD34D] border border-[#F59E0B]/60 text-xs sm:text-sm font-bold shadow">
+                          {siteSettings.site_name || DEFAULT_SITE_NAME}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 4 Live Impact Bento Counter Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2.5">
+                      <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-[#F59E0B]/40 text-center">
+                        <span className="block text-lg sm:text-xl font-bold font-english text-[#FCD34D]">
+                          {approvedMembers.length}
+                        </span>
+                        <span className="text-[11px] text-gray-200 font-medium">নিবন্ধিত সদস্য</span>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-[#F59E0B]/40 text-center">
+                        <span className="block text-lg sm:text-xl font-bold font-english text-emerald-300">
+                          {activities.length}
+                        </span>
+                        <span className="text-[11px] text-gray-200 font-medium">মানবিক কার্যক্রম</span>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-[#F59E0B]/40 text-center">
+                        <span className="block text-lg sm:text-xl font-bold font-english text-[#FCD34D]">
+                          {activeHomepageCampaigns.length}
+                        </span>
+                        <span className="text-[11px] text-gray-200 font-medium">চলমান প্রজেক্ট</span>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-[#F59E0B]/40 text-center">
+                        <span className="block text-lg sm:text-xl font-bold font-english text-red-300">
+                          {approvedMembers.filter((m) => Boolean(m.blood_group)).length}
+                        </span>
+                        <span className="text-[11px] text-gray-200 font-medium">রক্তদাতা সদস্য</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : (
+            /* A. COMPACT HERO WITH SOFT BANNER OPACITY, RADIAL VINTAGE BLUR & FLOATING INSPIRATIONAL PILLS */
             <section className="relative overflow-hidden bg-[#07221B] text-white min-h-[250px] sm:min-h-[400px] flex flex-col items-center justify-center py-6 sm:py-12 px-3 sm:px-6 border-b border-[#D4AF37]/60">
               {/* Softly Visible Fading Background Banner Slideshow (Lower Opacity + Subtle Blur) */}
               {validBanners.map((bannerUrl, idx) => (
@@ -4252,6 +5843,18 @@ export default function App() {
                     <UserPlus className="w-3.5 h-3.5 shrink-0" />
                     <span>সদস্য হিসেবে যুক্ত হোন</span>
                   </button>
+                  {siteSettings.show_payment_on_home !== false && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        document.getElementById('homepage-donation-section')?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 sm:px-6 sm:py-2.5 rounded-full bg-gradient-to-r from-[#E2136E] to-[#F7941D] text-white border border-white/30 font-bold text-xs sm:text-sm shadow-md hover:scale-[1.02] transition-all whitespace-nowrap"
+                    >
+                      <HeartHandshake className="w-3.5 h-3.5 shrink-0" />
+                      <span>অনুদান ও সহযোগিতা</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setCurrentView('members')}
@@ -4279,6 +5882,7 @@ export default function App() {
                 )}
               </div>
             </section>
+            )}
 
             {/* A2. REAL-TIME PROJECT TARGET FUND PROGRESS BARS (ADMIN CONTROLLED) */}
             {activeHomepageCampaigns.length > 0 && (
@@ -4392,17 +5996,49 @@ export default function App() {
                   </p>
                 </div>
               ) : (
-                <div className="columns-1 sm:columns-2 lg:columns-3 gap-5 space-y-5">
+                <div
+                  className={
+                    activeUiTheme === 'royal_noor'
+                      ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6'
+                      : 'columns-1 sm:columns-2 lg:columns-3 gap-5 space-y-5'
+                  }
+                >
                   {filteredActivities.map((act) => (
                     <ActivityCardItem
                       key={act.id}
                       act={act}
+                      uiTheme={activeUiTheme}
                       onSelect={(selected) => setSelectedActivityModal(selected)}
                     />
                   ))}
                 </div>
               )}
             </section>
+
+            {/* C. PUBLIC HOMEPAGE BKASH & NAGAD DONATION / FUNDING SECTION (ADMIN TOGGLE CONTROLLED) */}
+            {siteSettings.show_payment_on_home !== false && (
+              <section
+                id="homepage-donation-section"
+                className="max-w-5xl mx-auto px-3 sm:px-6 pb-12 sm:pb-16 scroll-mt-20"
+              >
+                <div className="text-center max-w-2xl mx-auto mb-6">
+                  <IslamicSectionDivider subtitle={activePaymentConfig.badge_text} />
+                  <h2 className="text-2xl sm:text-3xl font-bold text-[#0A2F25]">
+                    {activePaymentConfig.section_title}
+                  </h2>
+                </div>
+                <PaymentContributionCard
+                  paymentNumbers={allPaymentNumbers}
+                  paymentConfig={activePaymentConfig}
+                  isMemberDashboard={false}
+                  uiTheme={activeUiTheme}
+                  defaultName={appUser?.name || ''}
+                  defaultPhone={appUser?.mobile || ''}
+                  onSubmitPayment={handleSubmitPaymentContribution}
+                  onCopyNumber={copyPaymentNum}
+                />
+              </section>
+            )}
 
 
 
@@ -4542,6 +6178,63 @@ export default function App() {
                 <div className="bg-white rounded-3xl p-10 text-center border border-[#D4AF37]/30 shadow-sm max-w-md mx-auto">
                   <Users className="w-10 h-10 text-[#D4AF37] mx-auto mb-2" />
                   <p className="text-gray-500 text-xs sm:text-sm">কোনো সদস্য খুঁজে পাওয়া যায়নি।</p>
+                </div>
+              ) : activeUiTheme === 'royal_noor' ? (
+                /* THEME 2 (`royal_noor`): ROYAL MEDALLION HORIZONTAL BENTO MEMBER CARDS */
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredPublicMembers.map((member) => {
+                    const rawDesig = (member.designation || '').trim();
+                    const publicDesignation =
+                      !rawDesig || rawDesig === 'অ্যাডমিন' ? 'সাধারণ সদস্য' : rawDesig;
+                    const avatarSrc = optimizeMedia(member.avatar_url);
+
+                    return (
+                      <div
+                        key={member.id}
+                        onClick={() => setSelectedMemberModal(member)}
+                        className="cursor-pointer group bg-[#FFFDF9] rounded-2xl p-4 border-2 border-[#D97706]/35 hover:border-[#D97706] shadow-sm hover:shadow-xl transition-all flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="w-15 h-15 sm:w-16 sm:h-16 rounded-2xl p-0.5 bg-gradient-to-tr from-[#111C38] via-[#D97706] to-[#111C38] shrink-0 shadow">
+                            {avatarSrc ? (
+                              <img
+                                src={avatarSrc}
+                                alt={member.name}
+                                loading="lazy"
+                                className="w-14 h-14 sm:w-15 sm:h-15 rounded-2xl object-cover bg-white"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 sm:w-15 sm:h-15 rounded-2xl bg-[#111C38] text-[#FCD34D] flex items-center justify-center text-lg font-bold">
+                                {member.name.charAt(0)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-sm sm:text-base font-bold text-[#111C38] group-hover:text-[#B45309] truncate">
+                              {member.name}
+                            </h3>
+                            <span className="mt-1 inline-flex items-center px-3 py-0.5 rounded-full text-[11px] font-bold bg-[#111C38] text-[#FCD34D] border border-[#D97706]/50">
+                              {publicDesignation}
+                            </span>
+                            {member.bio && (
+                              <p className="text-[11px] text-gray-500 mt-1 truncate">{member.bio}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {member.blood_group && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-red-600 text-white font-english font-bold text-xs shadow-sm">
+                              {member.blood_group}
+                            </span>
+                          )}
+                          <span className="text-[11px] font-bold text-[#B45309] group-hover:underline">
+                            প্রোফাইল →
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
@@ -4919,15 +6612,17 @@ export default function App() {
                 {[
                   { id: 'overview', label: 'ওভারভিউ', icon: LayoutDashboard },
                   { id: 'members', label: 'সদস্য পরিচালনা', icon: Users },
-                  { id: 'finances', label: 'জমা/খরচের হিসাব', icon: Wallet },
+                  { id: 'finances', label: 'ফান্ড ও বিকাশ/নগদ', icon: Wallet },
+                  { id: 'theme_ui', label: 'থিম ও ইউআই', icon: Sparkles },
                   { id: 'works', label: 'কার্যক্রম আপডেট', icon: FolderKanban },
                   { id: 'ideas', label: 'পরিকল্পনা সমূহ', icon: Lightbulb },
                   { id: 'gallery', label: 'গ্যালারি', icon: ImageIcon },
-                  { id: 'settings', label: 'সেটিংস', icon: Settings },
+                  { id: 'settings', label: 'সেটিংস ও পেমেন্ট', icon: Settings },
                   { id: 'my_profile', label: 'আমার প্রোফাইল', icon: User }
                 ].map((tab) => {
                   const IconComp = tab.icon;
                   const active = activeTab === tab.id;
+                  const pendingPaymentsCount = paymentSubmissions.filter((p) => p.status === 'pending').length;
                   return (
                     <button
                       key={tab.id}
@@ -4946,6 +6641,11 @@ export default function App() {
                           {pendingMembers.length}
                         </span>
                       )}
+                      {tab.id === 'finances' && pendingPaymentsCount > 0 && (
+                        <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#E2136E] text-white font-english">
+                          {pendingPaymentsCount}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -4953,10 +6653,11 @@ export default function App() {
             ) : (
               <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 mb-5">
                 {[
-                  { id: 'my_account', label: 'আমার জমা', icon: Wallet },
-                  { id: 'my_profile', label: 'প্রোফাইল আপডেট', icon: User },
+                  { id: 'my_account', label: 'আমার জমা ও পেমেন্ট', icon: Wallet },
+                  { id: 'member_payment', label: 'অনুদান দিন (বিকাশ/নগদ)', icon: HeartHandshake },
                   { id: 'foundation_funds', label: 'ফান্ড', icon: TrendingUp },
-                  { id: 'expense_history', label: 'খরচ', icon: FileText }
+                  { id: 'expense_history', label: 'খরচ', icon: FileText },
+                  { id: 'my_profile', label: 'প্রোফাইল আপডেট', icon: User }
                 ].map((tab) => {
                   const IconComp = tab.icon;
                   const active = activeTab === tab.id;
@@ -4983,6 +6684,7 @@ export default function App() {
             {/* ADMIN TAB 1: ওভারভিউ (`overview`)                              */}
             {/* ============================================================== */}
             {appUser.role === 'admin' && activeTab === 'overview' && (
+              <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
                 <div className="bg-gradient-to-br from-[#0A2F25] to-[#155e4a] text-white rounded-3xl p-6 border-2 border-[#D4AF37] shadow-lg">
                   <div className="flex items-center justify-between mb-3">
@@ -5019,6 +6721,83 @@ export default function App() {
                     ৳ {totalExpense.toLocaleString('en-US')}
                   </p>
                 </div>
+              </div>
+
+              {/* Quick Admin Shortcuts for Theme Switcher & bKash/Nagad Payment Control */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white rounded-3xl p-5 border-2 border-[#D4AF37]/50 shadow-sm flex flex-col justify-between gap-3">
+                  <div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#0A2F25]/10 text-[#0A2F25] text-[11px] font-bold">
+                      ডুয়াল ইসলামিক থিম কন্ট্রোলার
+                    </span>
+                    <h4 className="text-base font-bold text-[#0A2F25] mt-1">
+                      বর্তমান ইউআই থিম: {activeUiTheme === 'royal_noor' ? 'রয়্যাল নূর-এ-হারামাইন (নতুন UI)' : 'ক্লাসিক মদিনা এমারেল্ড (পূর্বের UI)'}
+                    </h4>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      এক ক্লিকে পুরো ওয়েবসাইটের থিম ও ডিজাইন পরিবর্তন করতে নিচের বাটনে ক্লিক করুন।
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchUiTheme(activeUiTheme === 'royal_noor' ? 'classic_emerald' : 'royal_noor')}
+                      className="px-4 py-2 rounded-xl bg-[#0A2F25] text-[#F3D568] border border-[#D4AF37] text-xs font-bold shadow"
+                    >
+                      {activeUiTheme === 'royal_noor' ? 'ক্লাসিক এমারেল্ড থিমে যান' : 'নতুন রয়্যাল নূর ইউআই চালু করুন'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('theme_ui')}
+                      className="px-4 py-2 rounded-xl bg-[#F4F7F5] text-[#0A2F25] border border-gray-300 text-xs font-bold"
+                    >
+                      থিম সেকশন খুলুন →
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-3xl p-5 border-2 border-[#D4AF37]/50 shadow-sm flex flex-col justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded-full bg-[#E2136E] text-white text-[10px] font-bold">বিকাশ</span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#F7941D] text-white text-[10px] font-bold">নগদ</span>
+                      <span className="text-[11px] font-bold text-emerald-700">
+                        • সক্রিয় নাম্বার: {activePaymentNumbers.length}টি
+                      </span>
+                    </div>
+                    <h4 className="text-base font-bold text-[#0A2F25] mt-1">
+                      হোমপেজ অনুদান সেকশন: {siteSettings.show_payment_on_home !== false ? 'চালু আছে (ON)' : 'বন্ধ আছে (OFF)'}
+                    </h4>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      বিকাশ/নগদ নাম্বার যুক্ত বা পরিবর্তন করতে এবং হোমপেজ টগল নিয়ন্ত্রণ করতে নিচে ক্লিক করুন।
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleShowPaymentOnHome}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow"
+                    >
+                      {siteSettings.show_payment_on_home !== false ? 'হোমপেজে বন্ধ করুন' : 'হোমপেজে চালু করুন'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('finances')}
+                      className="px-4 py-2 rounded-xl bg-[#F4F7F5] text-[#0A2F25] border border-gray-300 text-xs font-bold"
+                    >
+                      বিকাশ/নগদ ম্যানেজার খুলুন →
+                    </button>
+                  </div>
+                </div>
+              </div>
+              </div>
+            )}
+
+            {/* ============================================================== */}
+            {/* ADMIN DEDICATED TAB: থিম ও ইউআই (`theme_ui`)                    */}
+            {/* ============================================================== */}
+            {appUser.role === 'admin' && activeTab === 'theme_ui' && (
+              <div className="space-y-6">
+                {renderAdminThemeSwitcher()}
               </div>
             )}
 
@@ -5363,6 +7142,9 @@ export default function App() {
             {/* ============================================================== */}
             {appUser.role === 'admin' && activeTab === 'finances' && (
               <div className="space-y-6">
+                {/* 0. ADMIN BKASH & NAGAD PAYMENT SYSTEM & HOMEPAGE TOGGLE CONTROLLER */}
+                {renderAdminPaymentManager()}
+
                 {/* 1. PROJECT-BASED TARGET FUND PROGRESS BAR CONTROLLER */}
                 <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-[#D4AF37]/55 shadow-sm space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -6184,10 +7966,18 @@ export default function App() {
             {/* ADMIN TAB 7: সেটিংস (`settings`)                                */}
             {/* ============================================================== */}
             {appUser.role === 'admin' && activeTab === 'settings' && (
-              <form
-                onSubmit={handleSaveSiteSettings}
-                className="bg-white rounded-3xl p-5 sm:p-6 border border-[#D4AF37]/40 shadow-sm space-y-5"
-              >
+              <div className="space-y-6">
+                {/* 1. DUAL ISLAMIC THEME SWITCHER */}
+                {renderAdminThemeSwitcher()}
+
+                {/* 2. BKASH & NAGAD PAYMENT MANAGER & HOMEPAGE TOGGLE */}
+                {renderAdminPaymentManager()}
+
+                {/* 3. SITE BRANDING, LOGO, FAVICON & BANNERS FORM */}
+                <form
+                  onSubmit={handleSaveSiteSettings}
+                  className="bg-white rounded-3xl p-5 sm:p-6 border border-[#D4AF37]/40 shadow-sm space-y-5"
+                >
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
@@ -6415,6 +8205,7 @@ export default function App() {
                   <span>সেটিংস সংরক্ষণ করুন</span>
                 </button>
               </form>
+              </div>
             )}
 
             {/* ============================================================== */}
@@ -6464,6 +8255,18 @@ export default function App() {
                         </p>
                       </div>
 
+                      {/* Member Dashboard Direct bKash / Nagad Payment & Funding System */}
+                      <PaymentContributionCard
+                        paymentNumbers={allPaymentNumbers}
+                        paymentConfig={activePaymentConfig}
+                        isMemberDashboard={true}
+                        uiTheme={activeUiTheme}
+                        defaultName={appUser.name}
+                        defaultPhone={appUser.mobile}
+                        onSubmitPayment={handleSubmitPaymentContribution}
+                        onCopyNumber={copyPaymentNum}
+                      />
+
                       <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#D4AF37]/40 shadow-sm overflow-hidden">
                         <h3 className="text-base sm:text-lg font-bold text-[#0A2F25] mb-4">
                           আমার জমার তালিকা
@@ -6504,9 +8307,87 @@ export default function App() {
             )}
 
             {/* ============================================================== */}
+            {/* REGULAR MEMBER TAB 2: অনুদান দিন (`member_payment`)             */}
+            {/* ============================================================== */}
+            {appUser.role === 'member' && activeTab === 'member_payment' && (
+              <div className="space-y-6">
+                <PaymentContributionCard
+                  paymentNumbers={allPaymentNumbers}
+                  paymentConfig={activePaymentConfig}
+                  isMemberDashboard={true}
+                  uiTheme={activeUiTheme}
+                  defaultName={appUser.name}
+                  defaultPhone={appUser.mobile}
+                  onSubmitPayment={handleSubmitPaymentContribution}
+                  onCopyNumber={copyPaymentNum}
+                />
+
+                {/* Member's Own Submitted bKash / Nagad Requests History */}
+                {(() => {
+                  const myPaySubs = paymentSubmissions.filter(
+                    (p) =>
+                      p.member_id === appUser.id ||
+                      p.sender_name.toLowerCase() === appUser.name.toLowerCase()
+                  );
+                  if (myPaySubs.length === 0) return null;
+                  return (
+                    <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#D4AF37]/40 shadow-sm space-y-3">
+                      <h3 className="text-base sm:text-lg font-bold text-[#0A2F25]">
+                        আমার প্রেরিত বিকাশ/নগদ পেমেন্টসমূহ ({myPaySubs.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {myPaySubs.map((sub) => (
+                          <div
+                            key={sub.id}
+                            className="p-3.5 rounded-2xl bg-[#F4F7F5] border border-gray-200 flex flex-wrap items-center justify-between gap-2"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white ${
+                                    sub.provider === 'bKash'
+                                      ? 'bg-[#E2136E]'
+                                      : sub.provider === 'Nagad'
+                                      ? 'bg-[#F7941D]'
+                                      : 'bg-[#8C3494]'
+                                  }`}
+                                >
+                                  {sub.provider}
+                                </span>
+                                <span className="font-bold font-english text-sm text-[#0A2F25]">
+                                  ৳ {Number(sub.amount).toLocaleString('en-US')}
+                                </span>
+                                <span className="text-xs text-gray-600">
+                                  ({sub.purpose || 'অনুদান'})
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-gray-500 font-english mt-0.5">
+                                নাম্বার: {sub.sender_number || '—'} {sub.trx_id ? `• TrxID: ${sub.trx_id}` : ''} • {sub.month}
+                              </p>
+                            </div>
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                sub.status === 'approved'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {sub.status === 'approved' ? '✓ অনুমোদিত' : 'যাচাই চলছে'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* ============================================================== */}
             {/* REGULAR MEMBER TAB 3: ফান্ড (`foundation_funds`)                */}
             {/* ============================================================== */}
             {appUser.role === 'member' && activeTab === 'foundation_funds' && (
+              <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
                 <div className="bg-gradient-to-br from-[#0A2F25] to-[#155e4a] text-white rounded-3xl p-6 border-2 border-[#D4AF37] shadow-lg">
                   <span className="text-sm font-semibold text-[#F3D568]">বর্তমান ফান্ড</span>
@@ -6526,6 +8407,18 @@ export default function App() {
                     ৳ {totalExpense.toLocaleString('en-US')}
                   </p>
                 </div>
+              </div>
+
+              <PaymentContributionCard
+                paymentNumbers={allPaymentNumbers}
+                paymentConfig={activePaymentConfig}
+                isMemberDashboard={true}
+                uiTheme={activeUiTheme}
+                defaultName={appUser.name}
+                defaultPhone={appUser.mobile}
+                onSubmitPayment={handleSubmitPaymentContribution}
+                onCopyNumber={copyPaymentNum}
+              />
               </div>
             )}
 

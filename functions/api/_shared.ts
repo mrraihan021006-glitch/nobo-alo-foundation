@@ -1,11 +1,28 @@
 // ============================================================================
 // Cloudflare Pages D1 Backend Handler for Nobo Alo Foundation
 // Connects React frontend directly to Cloudflare D1 (nobo-alo-db: 2c75ca5d-1dc3-4904-acb6-4ca6bd5202cd)
-// Supports Email OR Bangladeshi Mobile Number Login, Designation Management, & Edge FB OpenGraph Fetch
+// Supports Email OR Bangladeshi Mobile Number Login, Designation Management,
+// Dual Islamic Theme Engine (`classic_emerald` | `royal_noor`),
+// Admin-Managed Free bKash/Nagad Payment System, & Edge FB OpenGraph Fetch
 // ============================================================================
 
 const SUPER_ADMIN_EMAIL = 'mohammadraihan4386.bd@gmail.com';
-const DEFAULT_DESIGNATIONS = ["সভাপতি", "সহ-সভাপতি", "সাধারণ সম্পাদক", "যুগ্ম সাধারণ সম্পাদক", "সাংগঠনিক সম্পাদক", "সহ-সাংগঠনিক সম্পাদক", "অর্থ সম্পাদক", "সহ-অর্থ সম্পাদক", "প্রচার ও প্রকাশনা সম্পাদক", "দপ্তর সম্পাদক", "সমাজকল্যাণ ও ত্রাণ সম্পাদক", "শিক্ষা ও সাংস্কৃতিক সম্পাদক", "ধর্ম বিষয়ক সম্পাদক", "তথ্য ও প্রযুক্তি সম্পাদক", "কার্যনির্বাহী সদস্য", "উপদেষ্টা", "প্রতিষ্ঠাতা সদস্য", "আজীবন সদস্য", "অ্যাডমিন", "সদস্য", "সাধারণ সদস্য"];
+const DEFAULT_DESIGNATIONS = [
+  "সভাপতি", "সহ-সভাপতি", "সাধারণ সম্পাদক", "যুগ্ম সাধারণ সম্পাদক",
+  "সাংগঠনিক সম্পাদক", "সহ-সাংগঠনিক সম্পাদক", "অর্থ সম্পাদক", "সহ-অর্থ সম্পাদক",
+  "প্রচার ও প্রকাশনা সম্পাদক", "দপ্তর সম্পাদক", "সমাজকল্যাণ ও ত্রাণ সম্পাদক",
+  "শিক্ষা ও সাংস্কৃতিক সম্পাদক", "ধর্ম বিষয়ক সম্পাদক", "তথ্য ও প্রযুক্তি সম্পাদক",
+  "কার্যনির্বাহী সদস্য", "উপদেষ্টা", "প্রতিষ্ঠাতা সদস্য", "আজীবন সদস্য",
+  "অ্যাডমিন", "সদস্য", "সাধারণ সদস্য"
+];
+
+const DEFAULT_PAYMENT_CONFIG = {
+  badge_text: 'সাদাকাহ ও মানবিক সহায়তা তহবিল',
+  section_title: 'মানবতার সেবায় অনুদান ও সহযোগিতা দিন',
+  section_subtitle: 'আপনার ক্ষুদ্র অনুদান, যাকাত বা মাসিক ফান্ডিং অসহায় মানুষের মুখে হাসি ফোটাতে পারে। নিচের যেকোনো বিকাশ বা নগদ নাম্বারে সম্পূর্ণ ফ্রিতে অনুদান পাঠিয়ে ট্রানজেকশন তথ্য নিশ্চিত করুন।',
+  member_title: 'মাসিক ফান্ডিং ও মানবিক অনুদান প্রেরণ (বিকাশ / নগদ)',
+  member_subtitle: 'অ্যাডমিন নির্ধারিত নিচের অফিসিয়াল বিকাশ বা নগদ নাম্বারে আপনার মাসিক ফান্ড বা এককালীন সহযোগিতা পাঠিয়ে নিচের ফর্মে নিশ্চিত করুন।'
+};
 
 const cleanDeadSupabaseUrl = (u?: string | null): string => {
   if (!u) return '';
@@ -60,11 +77,15 @@ async function ensureSchema(db: any) {
       banners TEXT DEFAULT '["","","",""]',
       designations TEXT DEFAULT '',
       campaigns TEXT DEFAULT '[]',
+      ui_theme TEXT DEFAULT 'classic_emerald',
+      payment_numbers TEXT DEFAULT '[]',
+      show_payment_on_home INTEGER DEFAULT 1,
+      payment_config TEXT DEFAULT '{}',
       auto_approve INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`),
-    db.prepare(`INSERT OR IGNORE INTO site_settings (id, site_name, tagline, announcement_text, logo_url, banners, auto_approve)
-      VALUES (1, 'নব আলো ফাউন্ডেশন', 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।', 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।', '', '["","","",""]', 0)`),
+    db.prepare(`INSERT OR IGNORE INTO site_settings (id, site_name, tagline, announcement_text, logo_url, banners, ui_theme, show_payment_on_home, auto_approve)
+      VALUES (1, 'নব আলো ফাউন্ডেশন', 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।', 'মানবতার সেবায়, একসাথে নতুন আলোর সন্ধানে।', '', '["","","",""]', 'classic_emerald', 1, 0)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -100,6 +121,20 @@ async function ensureSchema(db: any) {
       description TEXT DEFAULT '',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY,
+      member_id TEXT DEFAULT '',
+      sender_name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      amount REAL NOT NULL,
+      sender_number TEXT DEFAULT '',
+      receiver_number TEXT DEFAULT '',
+      trx_id TEXT DEFAULT '',
+      purpose TEXT DEFAULT 'সাধারণ অনুদান',
+      month TEXT DEFAULT '',
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS ideas (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -118,6 +153,12 @@ async function ensureSchema(db: any) {
     `ALTER TABLE site_settings ADD COLUMN favicon_url TEXT DEFAULT ''`,
     `ALTER TABLE site_settings ADD COLUMN designations TEXT DEFAULT ''`,
     `ALTER TABLE site_settings ADD COLUMN campaigns TEXT DEFAULT '[]'`,
+    `ALTER TABLE site_settings ADD COLUMN ui_theme TEXT DEFAULT 'classic_emerald'`,
+    `ALTER TABLE site_settings ADD COLUMN payment_numbers TEXT DEFAULT '[]'`,
+    `ALTER TABLE site_settings ADD COLUMN show_payment_on_home INTEGER DEFAULT 1`,
+    `ALTER TABLE site_settings ADD COLUMN payment_config TEXT DEFAULT '{}'`,
+    `ALTER TABLE payments ADD COLUMN receiver_number TEXT DEFAULT ''`,
+    `ALTER TABLE payments ADD COLUMN purpose TEXT DEFAULT 'সাধারণ অনুদান'`,
     `ALTER TABLE users ADD COLUMN blood_group TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN age TEXT DEFAULT ''`,
@@ -211,7 +252,6 @@ export const onRequest = async (context: any) => {
         ogImage = '';
       }
 
-      // Extract username from final resolved URL
       let username = '';
       try {
         const parsed = new URL(finalUrl);
@@ -253,11 +293,12 @@ export const onRequest = async (context: any) => {
 
     // 1. GET /api/bootstrap
     if ((path === 'bootstrap' || path === '') && method === 'GET') {
-      const [settingsRes, usersRes, actRes, finRes, ideasRes, galRes] = await db.batch([
+      const [settingsRes, usersRes, actRes, finRes, payRes, ideasRes, galRes] = await db.batch([
         db.prepare('SELECT * FROM site_settings WHERE id = 1'),
         db.prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, bio, age, reminder_status, reminder_note, created_at FROM users ORDER BY sort_order ASC'),
         db.prepare('SELECT * FROM activities ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM finances ORDER BY created_at DESC'),
+        db.prepare('SELECT * FROM payments ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM ideas ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM gallery_images ORDER BY created_at DESC')
       ]);
@@ -296,6 +337,32 @@ export const onRequest = async (context: any) => {
         parsedCampaigns = [];
       }
 
+      let parsedPaymentNumbers: any[] = [];
+      try {
+        if (rawSettings.payment_numbers) {
+          const pArr = JSON.parse(rawSettings.payment_numbers);
+          if (Array.isArray(pArr)) parsedPaymentNumbers = pArr;
+        }
+      } catch {
+        parsedPaymentNumbers = [];
+      }
+
+      let parsedPaymentConfig: any = DEFAULT_PAYMENT_CONFIG;
+      try {
+        if (rawSettings.payment_config) {
+          const cfg = JSON.parse(rawSettings.payment_config);
+          if (cfg && typeof cfg === 'object') {
+            parsedPaymentConfig = { ...DEFAULT_PAYMENT_CONFIG, ...cfg };
+          }
+        }
+      } catch {
+        parsedPaymentConfig = DEFAULT_PAYMENT_CONFIG;
+      }
+
+      const rawTheme = String(rawSettings.ui_theme || 'classic_emerald').trim();
+      const resolvedTheme =
+        rawTheme === 'royal_noor' || rawTheme === 'modern_pearl' ? 'royal_noor' : 'classic_emerald';
+
       const settings = {
         id: 1,
         site_name: rawSettings.site_name || 'নব আলো ফাউন্ডেশন',
@@ -306,6 +373,13 @@ export const onRequest = async (context: any) => {
         banners: parsedBanners,
         designations: parsedDesignations,
         campaigns: parsedCampaigns,
+        ui_theme: resolvedTheme,
+        payment_numbers: parsedPaymentNumbers,
+        show_payment_on_home:
+          rawSettings.show_payment_on_home === undefined || rawSettings.show_payment_on_home === null
+            ? true
+            : Boolean(rawSettings.show_payment_on_home),
+        payment_config: parsedPaymentConfig,
         auto_approve: Boolean(rawSettings.auto_approve)
       };
 
@@ -329,12 +403,13 @@ export const onRequest = async (context: any) => {
         members: usersRes.results || [],
         activities,
         finances: finRes.results || [],
+        payments: payRes.results || [],
         ideas: ideasRes.results || [],
         gallery: galRes.results || []
       });
     }
 
-    // 2. POST /api/register (or /api/auth/register) — Supports Email OR BD Phone Number
+    // 2. POST /api/register (or /api/auth/register)
     if ((path === 'register' || path === 'auth/register') && method === 'POST') {
       const body = await request.json();
       const rawIdentifier = String(body.identifier || body.email || body.mobile || '').trim();
@@ -358,7 +433,6 @@ export const onRequest = async (context: any) => {
       const id = body.id || crypto.randomUUID();
       const pwHash = await hashPassword(password);
 
-      // Check if phone number already exists
       if (mobile) {
         const existingByPhone = await db
           .prepare("SELECT id, email FROM users WHERE mobile = ? AND email != ? LIMIT 1")
@@ -391,7 +465,7 @@ export const onRequest = async (context: any) => {
       return jsonResponse({ user, ok: true });
     }
 
-    // 3. POST /api/login (or /api/auth/login) — Supports Email OR Bangladeshi Mobile Number!
+    // 3. POST /api/login (or /api/auth/login)
     if ((path === 'login' || path === 'auth/login') && method === 'POST') {
       const body = await request.json();
       const rawIdentifier = String(body.identifier || body.email || '').trim();
@@ -446,7 +520,6 @@ export const onRequest = async (context: any) => {
       return jsonResponse({ user: safeUser, ok: true });
     }
 
-    
     // 3B. POST /api/google-auth — Continue with Google OAuth Handler
     if (path === 'google-auth' && method === 'POST') {
       const body = await request.json();
@@ -454,7 +527,6 @@ export const onRequest = async (context: any) => {
       let gName = String(body.name || '').trim();
       let gPicture = String(body.picture || body.avatar_url || '').trim();
 
-      // If access_token is provided by Google Identity Services tokenClient, verify via Google UserInfo API
       if (body.access_token && !gEmail) {
         const uRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${body.access_token}` }
@@ -467,7 +539,6 @@ export const onRequest = async (context: any) => {
         }
       }
 
-      // If authorization code is provided, exchange with GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET
       if (body.code && !gEmail) {
         const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
@@ -549,11 +620,28 @@ export const onRequest = async (context: any) => {
       const cleanCampaigns = Array.isArray(body.campaigns)
         ? JSON.stringify(body.campaigns)
         : null;
+      const cleanUiTheme =
+        body.ui_theme !== undefined
+          ? body.ui_theme === 'royal_noor' || body.ui_theme === 'modern_pearl'
+            ? 'royal_noor'
+            : 'classic_emerald'
+          : null;
+      const cleanPaymentNumbers = Array.isArray(body.payment_numbers)
+        ? JSON.stringify(body.payment_numbers)
+        : null;
+      const cleanPaymentConfig =
+        body.payment_config && typeof body.payment_config === 'object'
+          ? JSON.stringify(body.payment_config)
+          : null;
 
       await db
         .prepare(
-          `INSERT INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, designations, campaigns, auto_approve, updated_at)
-           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `INSERT INTO site_settings (
+             id, site_name, tagline, announcement_text, logo_url, favicon_url,
+             banners, designations, campaigns, ui_theme, payment_numbers,
+             show_payment_on_home, payment_config, auto_approve, updated_at
+           )
+           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(id) DO UPDATE SET
              site_name = COALESCE(excluded.site_name, site_settings.site_name),
              tagline = COALESCE(excluded.tagline, site_settings.tagline),
@@ -563,6 +651,10 @@ export const onRequest = async (context: any) => {
              banners = COALESCE(excluded.banners, site_settings.banners),
              designations = COALESCE(excluded.designations, site_settings.designations),
              campaigns = COALESCE(excluded.campaigns, site_settings.campaigns),
+             ui_theme = COALESCE(excluded.ui_theme, site_settings.ui_theme),
+             payment_numbers = COALESCE(excluded.payment_numbers, site_settings.payment_numbers),
+             show_payment_on_home = COALESCE(excluded.show_payment_on_home, site_settings.show_payment_on_home),
+             payment_config = COALESCE(excluded.payment_config, site_settings.payment_config),
              auto_approve = COALESCE(excluded.auto_approve, site_settings.auto_approve),
              updated_at = CURRENT_TIMESTAMP`
         )
@@ -575,6 +667,10 @@ export const onRequest = async (context: any) => {
           cleanBanners,
           cleanDesignations,
           cleanCampaigns,
+          cleanUiTheme,
+          cleanPaymentNumbers,
+          typeof body.show_payment_on_home === 'boolean' ? (body.show_payment_on_home ? 1 : 0) : null,
+          cleanPaymentConfig,
           typeof body.auto_approve === 'boolean' ? (body.auto_approve ? 1 : 0) : null
         )
         .run();
@@ -725,6 +821,47 @@ export const onRequest = async (context: any) => {
     if (path === 'finances' && method === 'DELETE') {
       const id = url.searchParams.get('id');
       await db.prepare('DELETE FROM finances WHERE id = ?').bind(id).run();
+      return jsonResponse({ ok: true });
+    }
+
+    // 6B. POST / PUT / DELETE /api/payments (bKash / Nagad Contributions)
+    if (path === 'payments' && method === 'POST') {
+      const b = await request.json();
+      const id = b.id || crypto.randomUUID();
+      await db
+        .prepare(
+          `INSERT INTO payments (id, member_id, sender_name, provider, amount, sender_number, receiver_number, trx_id, purpose, month, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          id,
+          b.member_id || '',
+          b.sender_name || 'শুভাকাঙ্ক্ষী',
+          b.provider || 'bKash',
+          Number(b.amount || 0),
+          b.sender_number || '',
+          b.receiver_number || '',
+          b.trx_id || '',
+          b.purpose || 'সাধারণ অনুদান',
+          b.month || '',
+          b.status || 'pending'
+        )
+        .run();
+      return jsonResponse({ id, ok: true });
+    }
+
+    if (path === 'payments' && method === 'PUT') {
+      const b = await request.json();
+      await db
+        .prepare('UPDATE payments SET status = COALESCE(?, status) WHERE id = ?')
+        .bind(b.status ?? 'approved', b.id)
+        .run();
+      return jsonResponse({ ok: true });
+    }
+
+    if (path === 'payments' && method === 'DELETE') {
+      const id = url.searchParams.get('id');
+      await db.prepare('DELETE FROM payments WHERE id = ?').bind(id).run();
       return jsonResponse({ ok: true });
     }
 
