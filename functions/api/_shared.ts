@@ -1,11 +1,12 @@
 // ============================================================================
-// Cloudflare Pages D1 Backend Handler for Nobo Alo Foundation
+// Cloudflare Pages D1 Backend Handler for Nobo Alo Foundation (v9)
 // Connects React frontend directly to Cloudflare D1 (nobo-alo-db: 2c75ca5d-1dc3-4904-acb6-4ca6bd5202cd)
-// Supports Email OR Bangladeshi Mobile Number Login, Designation Management, & Edge FB OpenGraph Fetch
+// Supports Dual UI Theme Engine, bKash/Nagad Payment System, Google OAuth, & BD Phone/Email Auth
 // ============================================================================
 
 const SUPER_ADMIN_EMAIL = 'mohammadraihan4386.bd@gmail.com';
 const DEFAULT_DESIGNATIONS = ["সভাপতি", "সহ-সভাপতি", "সাধারণ সম্পাদক", "যুগ্ম সাধারণ সম্পাদক", "সাংগঠনিক সম্পাদক", "সহ-সাংগঠনিক সম্পাদক", "অর্থ সম্পাদক", "সহ-অর্থ সম্পাদক", "প্রচার ও প্রকাশনা সম্পাদক", "দপ্তর সম্পাদক", "সমাজকল্যাণ ও ত্রাণ সম্পাদক", "শিক্ষা ও সাংস্কৃতিক সম্পাদক", "ধর্ম বিষয়ক সম্পাদক", "তথ্য ও প্রযুক্তি সম্পাদক", "কার্যনির্বাহী সদস্য", "উপদেষ্টা", "প্রতিষ্ঠাতা সদস্য", "আজীবন সদস্য", "অ্যাডমিন", "সদস্য", "সাধারণ সদস্য"];
+const DEFAULT_PAYMENT_NUMBERS = [{"id": "pm-bkash-1", "provider": "bKash", "number": "01800-000000", "account_type": "Personal (Send Money)", "note": "বিকাশ সেন্ড মানি করে ট্রানজেকশন আইডি দিন"}, {"id": "pm-nagad-1", "provider": "Nagad", "number": "01800-000000", "account_type": "Personal (Send Money)", "note": "নগদ সেন্ড মানি করে ট্রানজেকশন আইডি দিন"}];
 
 const cleanDeadSupabaseUrl = (u?: string | null): string => {
   if (!u) return '';
@@ -60,6 +61,9 @@ async function ensureSchema(db: any) {
       banners TEXT DEFAULT '["","","",""]',
       designations TEXT DEFAULT '',
       campaigns TEXT DEFAULT '[]',
+      ui_theme TEXT DEFAULT 'classic_emerald',
+      payment_numbers TEXT DEFAULT '[]',
+      show_payment_on_home INTEGER DEFAULT 1,
       auto_approve INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`),
@@ -78,7 +82,11 @@ async function ensureSchema(db: any) {
       sort_order INTEGER DEFAULT 100,
       promoted_by TEXT DEFAULT '',
       fb_url TEXT DEFAULT '',
+      blood_group TEXT DEFAULT '',
       age TEXT DEFAULT '',
+      bio TEXT DEFAULT '',
+      reminder_status TEXT DEFAULT 'auto',
+      reminder_note TEXT DEFAULT '',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS activities (
@@ -100,6 +108,19 @@ async function ensureSchema(db: any) {
       description TEXT DEFAULT '',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS payment_submissions (
+      id TEXT PRIMARY KEY,
+      member_id TEXT DEFAULT '',
+      sender_name TEXT NOT NULL,
+      provider TEXT DEFAULT 'bKash',
+      sender_number TEXT DEFAULT '',
+      amount REAL NOT NULL,
+      trx_id TEXT DEFAULT '',
+      month TEXT DEFAULT '',
+      note TEXT DEFAULT '',
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS ideas (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -118,13 +139,16 @@ async function ensureSchema(db: any) {
     `ALTER TABLE site_settings ADD COLUMN favicon_url TEXT DEFAULT ''`,
     `ALTER TABLE site_settings ADD COLUMN designations TEXT DEFAULT ''`,
     `ALTER TABLE site_settings ADD COLUMN campaigns TEXT DEFAULT '[]'`,
-    `ALTER TABLE users ADD COLUMN blood_group TEXT DEFAULT ''`,
-    `ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''`,
-    `ALTER TABLE users ADD COLUMN age TEXT DEFAULT ''`,
-    `ALTER TABLE users ADD COLUMN reminder_status TEXT DEFAULT 'auto'`,
-    `ALTER TABLE users ADD COLUMN reminder_note TEXT DEFAULT ''`,
+    `ALTER TABLE site_settings ADD COLUMN ui_theme TEXT DEFAULT 'classic_emerald'`,
+    `ALTER TABLE site_settings ADD COLUMN payment_numbers TEXT DEFAULT '[]'`,
+    `ALTER TABLE site_settings ADD COLUMN show_payment_on_home INTEGER DEFAULT 1`,
     `ALTER TABLE users ADD COLUMN promoted_by TEXT DEFAULT ''`,
-    `ALTER TABLE users ADD COLUMN fb_url TEXT DEFAULT ''`
+    `ALTER TABLE users ADD COLUMN fb_url TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN blood_group TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN age TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN reminder_status TEXT DEFAULT 'auto'`,
+    `ALTER TABLE users ADD COLUMN reminder_note TEXT DEFAULT ''`
   ];
   for (const stmt of alterStatements) {
     try {
@@ -132,13 +156,6 @@ async function ensureSchema(db: any) {
     } catch {
       // Column already exists
     }
-  }
-
-  try {
-    await db.prepare(`UPDATE site_settings SET logo_url = '' WHERE logo_url LIKE '%xlcepfrjngtzrmpazkla.supabase.co%'`).run();
-    await db.prepare(`UPDATE site_settings SET favicon_url = '' WHERE favicon_url LIKE '%xlcepfrjngtzrmpazkla.supabase.co%'`).run();
-  } catch {
-    // Ignore
   }
 }
 
@@ -165,80 +182,6 @@ export const onRequest = async (context: any) => {
   const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/+$/, '');
   const method = request.method.toUpperCase();
 
-  // Edge Facebook Profile Meta & Dynamic Avatar Resolver (`GET /api/fb-profile?url=...`)
-  if (path === 'fb-profile' && method === 'GET') {
-    const targetUrl = (url.searchParams.get('url') || '').trim();
-    if (!targetUrl) {
-      return jsonResponse({ error: 'URL missing' }, 400);
-    }
-    try {
-      const fbRes = await fetch(targetUrl, {
-        redirect: 'follow',
-        headers: {
-          'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-          'Accept-Language': 'bn-BD,bn;q=0.9,en-US;q=0.8,en;q=0.7'
-        }
-      });
-      const finalUrl = fbRes.url || targetUrl;
-      const html = await fbRes.text();
-
-      const extractMeta = (prop: string): string => {
-        const r1 = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i');
-        const r2 = new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i');
-        const m = html.match(r1) || html.match(r2);
-        if (!m) return '';
-        return m[1]
-          .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-          .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
-          .replace(/&amp;/g, '&')
-          .replace(/&quot;/g, '"');
-      };
-
-      let ogTitle = extractMeta('og:title') || extractMeta('twitter:title') || '';
-      ogTitle = ogTitle
-        .replace(/\s*[-|•]\s*Facebook.*$/i, '')
-        .replace(/\s*\|\s*Facebook.*$/i, '')
-        .trim();
-
-      const isGeneric =
-        !ogTitle ||
-        ogTitle.toLowerCase() === 'facebook' ||
-        ogTitle.toLowerCase().includes('log in') ||
-        ogTitle.toLowerCase().includes('লগ ইন');
-
-      let ogImage = extractMeta('og:image') || extractMeta('twitter:image') || '';
-      if (ogImage.includes('static.xx.fbcdn.net') || ogImage.includes('fb_icon_325x325')) {
-        ogImage = '';
-      }
-
-      // Extract username from final resolved URL
-      let username = '';
-      try {
-        const parsed = new URL(finalUrl);
-        const seg = parsed.pathname.split('/').filter(Boolean)[0] || '';
-        if (seg && !['profile.php', 'people', 'share', 'login'].includes(seg.toLowerCase())) {
-          username = seg;
-        } else if (parsed.searchParams.get('id')) {
-          username = parsed.searchParams.get('id') || '';
-        }
-      } catch {
-        // ignore
-      }
-
-      const dynamicAvatar = username ? `https://unavatar.io/facebook/${encodeURIComponent(username)}` : '';
-      return jsonResponse({
-        ok: true,
-        name: isGeneric ? '' : ogTitle,
-        avatar_url: ogImage || dynamicAvatar,
-        dynamic_avatar_url: dynamicAvatar,
-        resolved_url: finalUrl,
-        username
-      });
-    } catch (e: any) {
-      return jsonResponse({ ok: false, error: e?.message || 'FB fetch error' }, 200);
-    }
-  }
-
   if (!env.DB) {
     return jsonResponse(
       { error: 'Cloudflare Pages-এ D1 Database binding (DB = nobo-alo-db) পাওয়া যায়নি।' },
@@ -253,11 +196,12 @@ export const onRequest = async (context: any) => {
 
     // 1. GET /api/bootstrap
     if ((path === 'bootstrap' || path === '') && method === 'GET') {
-      const [settingsRes, usersRes, actRes, finRes, ideasRes, galRes] = await db.batch([
+      const [settingsRes, usersRes, actRes, finRes, payRes, ideasRes, galRes] = await db.batch([
         db.prepare('SELECT * FROM site_settings WHERE id = 1'),
-        db.prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, bio, age, reminder_status, reminder_note, created_at FROM users ORDER BY sort_order ASC'),
+        db.prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, age, bio, reminder_status, reminder_note, created_at FROM users ORDER BY sort_order ASC'),
         db.prepare('SELECT * FROM activities ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM finances ORDER BY created_at DESC'),
+        db.prepare('SELECT * FROM payment_submissions ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM ideas ORDER BY created_at DESC'),
         db.prepare('SELECT * FROM gallery_images ORDER BY created_at DESC')
       ]);
@@ -275,16 +219,11 @@ export const onRequest = async (context: any) => {
       try {
         if (rawSettings.designations) {
           const arr = JSON.parse(rawSettings.designations);
-          if (Array.isArray(arr) && arr.length > 0) {
-            parsedDesignations = arr;
-          }
+          if (Array.isArray(arr) && arr.length > 0) parsedDesignations = arr;
         }
       } catch {
         parsedDesignations = DEFAULT_DESIGNATIONS;
       }
-
-      const cleanLogo = cleanDeadSupabaseUrl(rawSettings.logo_url);
-      const cleanFav = cleanDeadSupabaseUrl(rawSettings.favicon_url) || cleanLogo;
 
       let parsedCampaigns: any[] = [];
       try {
@@ -296,6 +235,19 @@ export const onRequest = async (context: any) => {
         parsedCampaigns = [];
       }
 
+      let parsedPayments: any[] = DEFAULT_PAYMENT_NUMBERS;
+      try {
+        if (rawSettings.payment_numbers) {
+          const pArr = JSON.parse(rawSettings.payment_numbers);
+          if (Array.isArray(pArr) && pArr.length > 0) parsedPayments = pArr;
+        }
+      } catch {
+        parsedPayments = DEFAULT_PAYMENT_NUMBERS;
+      }
+
+      const cleanLogo = cleanDeadSupabaseUrl(rawSettings.logo_url);
+      const cleanFav = cleanDeadSupabaseUrl(rawSettings.favicon_url) || cleanLogo;
+
       const settings = {
         id: 1,
         site_name: rawSettings.site_name || 'নব আলো ফাউন্ডেশন',
@@ -306,6 +258,9 @@ export const onRequest = async (context: any) => {
         banners: parsedBanners,
         designations: parsedDesignations,
         campaigns: parsedCampaigns,
+        ui_theme: rawSettings.ui_theme === 'modern_pearl' ? 'modern_pearl' : 'classic_emerald',
+        payment_numbers: parsedPayments,
+        show_payment_on_home: rawSettings.show_payment_on_home === undefined || rawSettings.show_payment_on_home === null ? true : Boolean(rawSettings.show_payment_on_home),
         auto_approve: Boolean(rawSettings.auto_approve)
       };
 
@@ -329,12 +284,13 @@ export const onRequest = async (context: any) => {
         members: usersRes.results || [],
         activities,
         finances: finRes.results || [],
+        payments: payRes.results || [],
         ideas: ideasRes.results || [],
         gallery: galRes.results || []
       });
     }
 
-    // 2. POST /api/register (or /api/auth/register) — Supports Email OR BD Phone Number
+    // 2. POST /api/register (or /api/auth/register)
     if ((path === 'register' || path === 'auth/register') && method === 'POST') {
       const body = await request.json();
       const rawIdentifier = String(body.identifier || body.email || body.mobile || '').trim();
@@ -358,7 +314,6 @@ export const onRequest = async (context: any) => {
       const id = body.id || crypto.randomUUID();
       const pwHash = await hashPassword(password);
 
-      // Check if phone number already exists
       if (mobile) {
         const existingByPhone = await db
           .prepare("SELECT id, email FROM users WHERE mobile = ? AND email != ? LIMIT 1")
@@ -384,14 +339,14 @@ export const onRequest = async (context: any) => {
         .run();
 
       const user = await db
-        .prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, bio, age, reminder_status, reminder_note, created_at FROM users WHERE email = ?')
+        .prepare('SELECT id, name, email, mobile, avatar_url, role, status, designation, sort_order, promoted_by, fb_url, blood_group, age, bio, reminder_status, reminder_note, created_at FROM users WHERE email = ?')
         .bind(email)
         .first();
 
       return jsonResponse({ user, ok: true });
     }
 
-    // 3. POST /api/login (or /api/auth/login) — Supports Email OR Bangladeshi Mobile Number!
+    // 3. POST /api/login (or /api/auth/login)
     if ((path === 'login' || path === 'auth/login') && method === 'POST') {
       const body = await request.json();
       const rawIdentifier = String(body.identifier || body.email || '').trim();
@@ -446,7 +401,6 @@ export const onRequest = async (context: any) => {
       return jsonResponse({ user: safeUser, ok: true });
     }
 
-    
     // 3B. POST /api/google-auth — Continue with Google OAuth Handler
     if (path === 'google-auth' && method === 'POST') {
       const body = await request.json();
@@ -454,7 +408,6 @@ export const onRequest = async (context: any) => {
       let gName = String(body.name || '').trim();
       let gPicture = String(body.picture || body.avatar_url || '').trim();
 
-      // If access_token is provided by Google Identity Services tokenClient, verify via Google UserInfo API
       if (body.access_token && !gEmail) {
         const uRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${body.access_token}` }
@@ -467,7 +420,6 @@ export const onRequest = async (context: any) => {
         }
       }
 
-      // If authorization code is provided, exchange with GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET
       if (body.code && !gEmail) {
         const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
@@ -549,11 +501,15 @@ export const onRequest = async (context: any) => {
       const cleanCampaigns = Array.isArray(body.campaigns)
         ? JSON.stringify(body.campaigns)
         : null;
+      const cleanPayments = Array.isArray(body.payment_numbers)
+        ? JSON.stringify(body.payment_numbers)
+        : null;
+      const cleanTheme = body.ui_theme === 'modern_pearl' ? 'modern_pearl' : body.ui_theme === 'classic_emerald' ? 'classic_emerald' : null;
 
       await db
         .prepare(
-          `INSERT INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, designations, campaigns, auto_approve, updated_at)
-           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `INSERT INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, designations, campaigns, ui_theme, payment_numbers, show_payment_on_home, auto_approve, updated_at)
+           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(id) DO UPDATE SET
              site_name = COALESCE(excluded.site_name, site_settings.site_name),
              tagline = COALESCE(excluded.tagline, site_settings.tagline),
@@ -563,6 +519,9 @@ export const onRequest = async (context: any) => {
              banners = COALESCE(excluded.banners, site_settings.banners),
              designations = COALESCE(excluded.designations, site_settings.designations),
              campaigns = COALESCE(excluded.campaigns, site_settings.campaigns),
+             ui_theme = COALESCE(excluded.ui_theme, site_settings.ui_theme),
+             payment_numbers = COALESCE(excluded.payment_numbers, site_settings.payment_numbers),
+             show_payment_on_home = COALESCE(excluded.show_payment_on_home, site_settings.show_payment_on_home),
              auto_approve = COALESCE(excluded.auto_approve, site_settings.auto_approve),
              updated_at = CURRENT_TIMESTAMP`
         )
@@ -575,6 +534,9 @@ export const onRequest = async (context: any) => {
           cleanBanners,
           cleanDesignations,
           cleanCampaigns,
+          cleanTheme,
+          cleanPayments,
+          typeof body.show_payment_on_home === 'boolean' ? (body.show_payment_on_home ? 1 : 0) : null,
           typeof body.auto_approve === 'boolean' ? (body.auto_approve ? 1 : 0) : null
         )
         .run();
@@ -666,8 +628,8 @@ export const onRequest = async (context: any) => {
                promoted_by = COALESCE(?, promoted_by),
                fb_url = COALESCE(?, fb_url),
                blood_group = COALESCE(?, blood_group),
-               bio = COALESCE(?, bio),
                age = COALESCE(?, age),
+               bio = COALESCE(?, bio),
                reminder_status = COALESCE(?, reminder_status),
                reminder_note = COALESCE(?, reminder_note),
                password_hash = COALESCE(?, password_hash)
@@ -685,8 +647,8 @@ export const onRequest = async (context: any) => {
           body.promoted_by ?? null,
           body.fb_url ?? null,
           body.blood_group ?? null,
-          body.bio ?? null,
           body.age ?? null,
+          body.bio ?? null,
           body.reminder_status ?? null,
           body.reminder_note ?? null,
           pwHash,
@@ -725,6 +687,45 @@ export const onRequest = async (context: any) => {
     if (path === 'finances' && method === 'DELETE') {
       const id = url.searchParams.get('id');
       await db.prepare('DELETE FROM finances WHERE id = ?').bind(id).run();
+      return jsonResponse({ ok: true });
+    }
+
+    // 6B. POST / PUT / DELETE /api/payments (bKash / Nagad Payment Submissions)
+    if (path === 'payments' && method === 'POST') {
+      const b = await request.json();
+      const id = b.id || crypto.randomUUID();
+      await db
+        .prepare(
+          'INSERT INTO payment_submissions (id, member_id, sender_name, provider, sender_number, amount, trx_id, month, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        )
+        .bind(
+          id,
+          b.member_id || '',
+          b.sender_name || 'শুভাকাঙ্ক্ষী',
+          b.provider || 'bKash',
+          b.sender_number || '',
+          Number(b.amount || 0),
+          b.trx_id || '',
+          b.month || '',
+          b.note || '',
+          b.status || 'pending'
+        )
+        .run();
+      return jsonResponse({ id, ok: true });
+    }
+
+    if (path === 'payments' && method === 'PUT') {
+      const b = await request.json();
+      await db
+        .prepare('UPDATE payment_submissions SET status = ? WHERE id = ?')
+        .bind(b.status || 'approved', b.id)
+        .run();
+      return jsonResponse({ ok: true });
+    }
+
+    if (path === 'payments' && method === 'DELETE') {
+      const id = url.searchParams.get('id');
+      await db.prepare('DELETE FROM payment_submissions WHERE id = ?').bind(id).run();
       return jsonResponse({ ok: true });
     }
 

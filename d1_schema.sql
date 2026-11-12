@@ -1,5 +1,5 @@
 -- ============================================================================
--- নব আলো ফাউন্ডেশন - Cloudflare D1 (SQLite) Database Schema
+-- নব আলো ফাউন্ডেশন - Cloudflare D1 (SQLite) Database Schema (v9)
 -- Database Name: nobo-alo-db
 -- Database ID: 2c75ca5d-1dc3-4904-acb6-4ca6bd5202cd
 -- ============================================================================
@@ -12,11 +12,16 @@ CREATE TABLE IF NOT EXISTS site_settings (
   logo_url TEXT DEFAULT '',
   favicon_url TEXT DEFAULT '',
   banners TEXT DEFAULT '["","","",""]',
+  designations TEXT DEFAULT '',
+  campaigns TEXT DEFAULT '[]',
+  ui_theme TEXT DEFAULT 'classic_emerald',
+  payment_numbers TEXT DEFAULT '[]',
+  show_payment_on_home INTEGER DEFAULT 1,
   auto_approve INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT OR IGNORE INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, auto_approve)
+INSERT OR IGNORE INTO site_settings (id, site_name, tagline, announcement_text, logo_url, favicon_url, banners, ui_theme, show_payment_on_home, auto_approve)
 VALUES (
   1,
   'নব আলো ফাউন্ডেশন',
@@ -25,6 +30,8 @@ VALUES (
   '',
   '',
   '["","","",""]',
+  'classic_emerald',
+  1,
   0
 );
 
@@ -41,6 +48,11 @@ CREATE TABLE IF NOT EXISTS users (
   sort_order INTEGER DEFAULT 100,
   promoted_by TEXT DEFAULT '',
   fb_url TEXT DEFAULT '',
+  blood_group TEXT DEFAULT '',
+  age TEXT DEFAULT '',
+  bio TEXT DEFAULT '',
+  reminder_status TEXT DEFAULT 'auto',
+  reminder_note TEXT DEFAULT '',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -62,6 +74,20 @@ CREATE TABLE IF NOT EXISTS finances (
   memberuid TEXT DEFAULT '',
   month TEXT DEFAULT '',
   description TEXT DEFAULT '',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS payment_submissions (
+  id TEXT PRIMARY KEY,
+  member_id TEXT DEFAULT '',
+  sender_name TEXT NOT NULL,
+  provider TEXT DEFAULT 'bKash',
+  sender_number TEXT DEFAULT '',
+  amount REAL NOT NULL,
+  trx_id TEXT DEFAULT '',
+  month TEXT DEFAULT '',
+  note TEXT DEFAULT '',
+  status TEXT DEFAULT 'pending',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
